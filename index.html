@@ -7,11 +7,51 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header class="hud">
-      <h1>Orbitwright</h1>
-      <p id="status">Prototype sandbox</p>
-    </header>
     <main id="view"></main>
+
+    <aside class="panel build" id="panel">
+      <h1>Orbitwright</h1>
+      <p class="subtitle">Prototype sandbox</p>
+      <h2>Modules</h2>
+      <div id="modules" class="list"></div>
+      <h2>Equipment</h2>
+      <div id="equipment" class="list two"></div>
+      <h2>Tools</h2>
+      <div class="list">
+        <button type="button" id="rotate">Rotate <kbd>R</kbd></button>
+        <button type="button" id="remove">Remove module <kbd>X</kbd></button>
+        <button type="button" id="undo">Undo <kbd>Ctrl Z</kbd></button>
+      </div>
+      <p class="help">
+        Click to place. Equipment: internal goes in a module's slots; external goes on a free hardpoint, so
+        point at the empty cell beside one. Click a module with nothing selected to inspect it. Right-drag or
+        arrow keys to pan. Esc to stop building.
+      </p>
+    </aside>
+
+    <section class="panel status" aria-label="Station status">
+      <div class="speeds" role="group" aria-label="Speed">
+        <button type="button" data-speed="0" title="Pause (Space)">❚❚</button>
+        <button type="button" data-speed="1">1×</button>
+        <button type="button" data-speed="3">3×</button>
+        <button type="button" data-speed="10">10×</button>
+      </div>
+      <div class="orbit">
+        <div class="orbit-line"><span id="orbit-label">Orbit 1</span><span id="phase-label">Day</span></div>
+        <div class="orbit-bar"><div class="day"></div><div class="marker" id="orbit-marker"></div></div>
+        <div class="orbit-line muted"><span id="phase-countdown"></span></div>
+      </div>
+      <dl class="totals">
+        <dt>Power</dt><dd id="power-balance">–</dd>
+        <dt>Makes / uses</dt><dd id="power-flow">–</dd>
+        <dt>Batteries</dt><dd id="power-stored">–</dd>
+      </dl>
+      <label class="toggle"><input type="checkbox" id="power-overlay" /> Power overlay <kbd>P</kbd></label>
+    </section>
+
+    <section class="panel inspector" id="inspector" hidden aria-label="Module inspector"></section>
+
+    <p id="message" class="message" role="status" aria-live="polite"></p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,55 +1,49 @@
-import { MODULE_TYPES, type ModuleTypeId, type Side } from "./content";
+import { MODULE_TYPES, type EquipmentTypeId } from "./content";
+import type { Placement } from "./geometry";
 
 /** Only low Earth orbit exists in the prototype; GEO and sun-synchronous come with the campaign. */
 export type OrbitType = "LEO";
 
-export interface GridCell {
-  x: number;
-  y: number;
-}
+export type ModuleId = number;
 
-export interface PlacedModule {
-  type: ModuleTypeId;
-  /** Grid cell of the module's top-left corner. */
-  position: GridCell;
+export interface PlacedModule extends Placement {
+  id: ModuleId;
+  /** Equipment in each internal slot, in the module type's slot order. */
+  slots: (EquipmentTypeId | null)[];
+  /** Equipment on each hardpoint, in the module type's hardpoint order. */
+  hardpoints: (EquipmentTypeId | null)[];
 }
 
 export interface Station {
   orbit: OrbitType;
+  /** Ticks run since the station was created. */
+  tick: number;
   modules: PlacedModule[];
+  nextModuleId: ModuleId;
+  /** Charge in each battery, in kWh, keyed by module and slot. */
+  batteries: Record<string, number>;
+  /** Earlier module layouts, most recent last, for undo. */
+  history: PlacedModule[][];
 }
 
 export function createStation(): Station {
   return {
     orbit: "LEO",
-    modules: [{ type: "core-node", position: { x: 0, y: 0 } }],
+    tick: 0,
+    modules: [newModule(1, { type: "core-node", position: { x: 0, y: 0 }, rotation: 0 })],
+    nextModuleId: 2,
+    batteries: {},
+    history: [],
   };
 }
 
-/** The grid cells a placed module covers. */
-export function footprintOf(module: PlacedModule): GridCell[] {
-  const { width, height } = MODULE_TYPES[module.type];
-  const cells: GridCell[] = [];
-  for (let dy = 0; dy < height; dy++) {
-    for (let dx = 0; dx < width; dx++) {
-      cells.push({ x: module.position.x + dx, y: module.position.y + dy });
-    }
-  }
-  return cells;
-}
-
-export interface PlacedPort {
-  /** Grid cell the port belongs to. */
-  x: number;
-  y: number;
-  side: Side;
-}
-
-/** A placed module's ports, in grid coordinates. */
-export function portsOf(module: PlacedModule): PlacedPort[] {
-  return MODULE_TYPES[module.type].ports.map((port) => ({
-    x: module.position.x + port.x,
-    y: module.position.y + port.y,
-    side: port.side,
-  }));
+/** A freshly built module with all its mounts empty. */
+export function newModule(id: ModuleId, placement: Placement): PlacedModule {
+  const type = MODULE_TYPES[placement.type];
+  return {
+    id,
+    ...placement,
+    slots: Array.from({ length: type.slots }, () => null),
+    hardpoints: type.hardpoints.map(() => null),
+  };
 }

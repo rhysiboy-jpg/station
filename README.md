@@ -27,6 +27,7 @@ npm run build      # static build into dist/
 - `src/sim/`: the simulation core. Plain TypeScript with no rendering or browser dependencies ([ADR 0001](docs/adr/0001-typescript-sim-core-separate-from-rendering.md)). Its public interface is `src/sim/index.ts`; the view imports only from there. This is enforced twice: `tsconfig.sim.json` type-checks the core without DOM types, and `src/sim/boundary.test.ts` fails if the core imports any package.
 - `src/sim/content.ts`: module types as data, so balancing is editing numbers.
 - `src/view/`: the PixiJS 2D view. It reads simulation state and draws it.
+- `src/ui/`: HTML panels (status, inspector).
 - `src/main.ts`: wires the two together.
 
 Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`. CI runs on every pull request.
