@@ -1,0 +1,40 @@
+:root {
+  --bg: #0b1a2e;
+  --ink: #cfe3ff;
+  --muted: #6f8db3;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  overflow: hidden;
+}
+
+#view { position: fixed; inset: 0; }
+
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.hud h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hud p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
