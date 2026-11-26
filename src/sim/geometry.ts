@@ -1,5 +1,5 @@
 // Grid geometry for placed modules: footprints and ports after rotation.
-import { MODULE_TYPES, type ModuleTypeId, type Side } from "./content";
+import { MODULE_TYPES, type ModuleTypeId, type PortDefinition, type Side } from "./content";
 
 export interface GridCell {
   x: number;
@@ -56,21 +56,29 @@ export function footprintOf(placement: Placement): GridCell[] {
 
 /** A placed module's ports, in grid coordinates. */
 export function portsOf(placement: Placement): PlacedPort[] {
+  return MODULE_TYPES[placement.type].ports.map((point) => placeEdgePoint(placement, point));
+}
+
+/** Where a placed module's hardpoints are, in grid coordinates, in data order. */
+export function hardpointPositionsOf(placement: Placement): PlacedPort[] {
+  return MODULE_TYPES[placement.type].hardpoints.map((point) => placeEdgePoint(placement, point));
+}
+
+/** Turns a point on a module's edge (as defined for rotation 0) into grid coordinates. */
+function placeEdgePoint(placement: Placement, point: PortDefinition): PlacedPort {
   const type = MODULE_TYPES[placement.type];
   const turns = quarterTurns(placement.rotation);
-  return type.ports.map((port) => {
-    let x: number = port.x;
-    let y: number = port.y;
-    let w: number = type.width;
-    let h: number = type.height;
-    // Each clockwise quarter turn maps cell (x, y) of a w x h module to (h - 1 - y, x).
-    for (let i = 0; i < turns; i++) {
-      [x, y] = [h - 1 - y, x];
-      [w, h] = [h, w];
-    }
-    const side = SIDES[(SIDES.indexOf(port.side) + turns) % 4] as Side;
-    return { x: placement.position.x + x, y: placement.position.y + y, side };
-  });
+  let x: number = point.x;
+  let y: number = point.y;
+  let w: number = type.width;
+  let h: number = type.height;
+  // Each clockwise quarter turn maps cell (x, y) of a w x h module to (h - 1 - y, x).
+  for (let i = 0; i < turns; i++) {
+    [x, y] = [h - 1 - y, x];
+    [w, h] = [h, w];
+  }
+  const side = SIDES[(SIDES.indexOf(point.side) + turns) % 4] as Side;
+  return { x: placement.position.x + x, y: placement.position.y + y, side };
 }
 
 /** The cell a port faces: where a matching port would have to be. */

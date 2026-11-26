@@ -1,11 +1,21 @@
-import type { ModuleTypeId } from "./content";
+import type { EquipmentTypeId, ModuleTypeId } from "./content";
+import {
+  clearBlockedHardpoints,
+  fitEquipment,
+  unfitEquipment,
+  type Displaced,
+  type MountRef,
+  type MountRejection,
+} from "./equipment";
 import type { GridCell, Rotation } from "./geometry";
 import { checkPlacement, connectedToCore } from "./placement";
-import type { ModuleId, PlacedModule, Station } from "./station";
+import { newModule, type ModuleId, type PlacedModule, type Station } from "./station";
 
 export type Command =
   | { type: "place"; module: ModuleTypeId; position: GridCell; rotation: Rotation }
   | { type: "remove"; moduleId: ModuleId }
+  | { type: "fit"; moduleId: ModuleId; mount: MountRef; equipment: EquipmentTypeId }
+  | { type: "unfit"; moduleId: ModuleId; mount: MountRef }
   | { type: "undo" };
 
 export type RejectionReason =
@@ -14,10 +24,16 @@ export type RejectionReason =
   | "would-split"
   | "core-node"
   | "no-such-module"
-  | "nothing-to-undo";
+  | "nothing-to-undo"
+  | MountRejection;
 
 export type CommandResult =
-  | { ok: true; station: Station }
+  | {
+      ok: true;
+      station: Station;
+      /** Equipment knocked off hardpoints that this command blocked. */
+      displaced: Displaced[];
+    }
   | { ok: false; reason: RejectionReason; message: string };
 
 /** Applies a player command. Returns the new station, or why the command was rejected. Never mutates. */
@@ -27,6 +43,9 @@ export function applyCommand(station: Station, command: Command): CommandResult 
       return place(station, command);
     case "remove":
       return remove(station, command.moduleId);
+    case "fit":
+    case "unfit":
+      return changeEquipment(station, command);
     case "undo":
       return undo(station);
   }
@@ -37,10 +56,12 @@ function place(station: Station, command: Extract<Command, { type: "place" }>): 
   const check = checkPlacement(station, placement);
   if (!check.ok) return check;
 
-  const placed: PlacedModule = { id: station.nextModuleId, ...placement };
+  const placed = newModule(station.nextModuleId, placement);
+  const { modules, displaced } = clearBlockedHardpoints([...station.modules, placed]);
   return {
     ok: true,
-    station: withBuildChange(station, [...station.modules, placed], station.nextModuleId + 1),
+    station: withBuildChange(station, modules, station.nextModuleId + 1),
+    displaced,
   };
 }
 
@@ -61,7 +82,7 @@ function remove(station: Station, moduleId: ModuleId): CommandResult {
       message: "Removing it would cut other modules off from the station.",
     };
   }
-  return { ok: true, station: withBuildChange(station, remaining, station.nextModuleId) };
+  return { ok: true, station: withBuildChange(station, remaining, station.nextModuleId), displaced: [] };
 }
 
 function undo(station: Station): CommandResult {
@@ -69,7 +90,29 @@ function undo(station: Station): CommandResult {
   if (!previous) {
     return { ok: false, reason: "nothing-to-undo", message: "Nothing to undo." };
   }
-  return { ok: true, station: { ...station, modules: previous, history: station.history.slice(0, -1) } };
+  return {
+    ok: true,
+    station: { ...station, modules: previous, history: station.history.slice(0, -1) },
+    displaced: [],
+  };
+}
+
+function changeEquipment(
+  station: Station,
+  command: Extract<Command, { type: "fit" | "unfit" }>,
+): CommandResult {
+  const module = station.modules.find((m) => m.id === command.moduleId);
+  if (!module) {
+    return { ok: false, reason: "no-such-module", message: "There is no module there." };
+  }
+  const result =
+    command.type === "fit"
+      ? fitEquipment(station, module, command.mount, command.equipment)
+      : unfitEquipment(module, command.mount);
+  if (!result.ok) return result;
+
+  const modules = station.modules.map((m) => (m.id === module.id ? result.module : m));
+  return { ok: true, station: withBuildChange(station, modules, station.nextModuleId), displaced: [] };
 }
 
 function withBuildChange(station: Station, modules: PlacedModule[], nextModuleId: ModuleId): Station {

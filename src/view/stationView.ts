@@ -2,14 +2,19 @@
 import { Container, Graphics, Text } from "pixi.js";
 import {
   connectionsOf,
+  EQUIPMENT_TYPES,
   footprintOf,
+  hardpointsOf,
   MODULE_TYPES,
   portsOf,
+  type EquipmentTypeId,
+  type PlacedModule,
   type PlacedPort,
   type Placement,
+  type PowerReport,
   type Station,
 } from "../sim";
-import { palette } from "./palette";
+import { equipmentColour, palette } from "./palette";
 
 /** Size of one grid cell in screen pixels. */
 export const CELL = 48;
@@ -18,6 +23,7 @@ const PORT_LENGTH = 16;
 const PORT_DEPTH = 5;
 const MODULE_INSET = 6;
 const MAJOR_EVERY = 4;
+const FONT = "ui-monospace, Menlo, Consolas, monospace";
 
 /** Grid lines across the screen, given where grid cell (0, 0)'s corner is on screen. */
 export function drawGrid(width: number, height: number, originX: number, originY: number): Graphics {
@@ -40,25 +46,38 @@ function lineColour(index: number): number {
   return ((index % MAJOR_EVERY) + MAJOR_EVERY) % MAJOR_EVERY === 0 ? palette.gridMajor : palette.gridMinor;
 }
 
-export interface StationHighlight {
+export interface StationDrawOptions {
   /** Module drawn as about to be removed. */
   removing?: number;
+  selected?: number;
+  /** Highlight free hardpoints (while an external equipment tool is chosen). */
+  showFreeHardpoints?: boolean;
+  /** Power overlay: colour modules by whether they're powered and show their net kW. */
+  power?: PowerReport;
 }
 
 /** The station in grid space: (0, 0) is the corner of grid cell (0, 0). */
-export function drawStation(station: Station, highlight: StationHighlight = {}): Container {
+export function drawStation(station: Station, options: StationDrawOptions = {}): Container {
   const layer = new Container();
-  const joined = new Set(
-    connectionsOf(station).flatMap((c) => [portKey(c.a.port), portKey(c.b.port)]),
-  );
+  const joined = new Set(connectionsOf(station).flatMap((c) => [portKey(c.a.port), portKey(c.b.port)]));
 
   for (const module of station.modules) {
-    const removing = highlight.removing === module.id;
-    layer.addChild(drawModuleBody(module, removing ? palette.invalid : undefined));
+    let tint: number | undefined;
+    if (options.removing === module.id) tint = palette.invalid;
+    else if (options.selected === module.id) tint = palette.selected;
+    else if (options.power) tint = options.power.modules[module.id]?.powered ? palette.power : palette.unpowered;
+
+    layer.addChild(drawModuleBody(module, tint, options.power !== undefined && tint !== palette.invalid));
     for (const port of portsOf(module)) {
       layer.addChild(drawPort(port, joined.has(portKey(port)) ? palette.portJoined : palette.portFree));
     }
-    layer.addChild(drawLabel(module));
+    for (const hardpoint of hardpointsOf(station, module)) {
+      if (hardpoint.equipment) layer.addChild(drawExternal(hardpoint, hardpoint.equipment));
+      else if (hardpoint.blocked) layer.addChild(drawBlocked(hardpoint));
+      else layer.addChild(drawEmptyHardpoint(hardpoint, options.showFreeHardpoints === true));
+    }
+    layer.addChild(drawSlots(module));
+    layer.addChild(drawLabel(module, options.power?.modules[module.id]));
   }
   return layer;
 }
@@ -68,9 +87,23 @@ export function drawGhost(placement: Placement, valid: boolean): Container {
   const colour = valid ? palette.valid : palette.invalid;
   const layer = new Container();
   layer.alpha = 0.75;
-  layer.addChild(drawModuleBody(placement, colour));
+  layer.addChild(drawModuleBody(placement, colour, false));
   for (const port of portsOf(placement)) layer.addChild(drawPort(port, colour));
   return layer;
+}
+
+/** A preview of external equipment about to go on a hardpoint. */
+export function drawEquipmentGhost(hardpoint: PlacedPort, equipment: EquipmentTypeId): Container {
+  const layer = new Container();
+  layer.alpha = 0.6;
+  layer.addChild(drawExternal(hardpoint, equipment));
+  return layer;
+}
+
+/** An outline around a module, for previews of internal equipment. */
+export function drawModuleOutline(placement: Placement, colour: number): Graphics {
+  const { left, top, width, height } = bounds(placement);
+  return new Graphics().roundRect(left - 3, top - 3, width + 6, height + 6, 8).stroke({ width: 2, color: colour });
 }
 
 function bounds(placement: Placement) {
@@ -87,18 +120,21 @@ function bounds(placement: Placement) {
   };
 }
 
-function drawModuleBody(placement: Placement, tint?: number): Graphics {
+function drawModuleBody(placement: Placement, tint: number | undefined, outlineOnly: boolean): Graphics {
   const { left, top, width, height } = bounds(placement);
   const type = MODULE_TYPES[placement.type];
   const g = new Graphics();
+  const stroke = tint ?? palette.moduleOutline;
 
   if (type.pressurised) {
+    const fill = outlineOnly || tint === undefined ? palette.moduleFill : tint;
     g.roundRect(left, top, width, height, 6)
-      .fill({ color: tint ?? palette.moduleFill, alpha: tint ? 0.25 : 1 })
-      .stroke({ width: 2, color: tint ?? palette.moduleOutline });
+      .fill({ color: fill, alpha: outlineOnly || tint === undefined ? 1 : 0.25 })
+      .stroke({ width: 2, color: stroke });
   } else {
     // Unpressurised truss: an open lattice rather than a solid hull.
-    g.rect(left, top, width, height).stroke({ width: 1.5, color: tint ?? palette.trussOutline });
+    const lattice = tint ?? palette.trussOutline;
+    g.rect(left, top, width, height).stroke({ width: 1.5, color: lattice });
     const step = 12;
     for (let d = step; d < width + height; d += step) {
       const x1 = left + Math.min(d, width);
@@ -107,45 +143,127 @@ function drawModuleBody(placement: Placement, tint?: number): Graphics {
       const y2 = top + Math.min(d, height);
       g.moveTo(x1, y1).lineTo(x2, y2);
     }
-    g.stroke({ width: 1, color: tint ?? palette.trussOutline, alpha: 0.5 });
+    g.stroke({ width: 1, color: lattice, alpha: 0.5 });
   }
   return g;
 }
 
-function drawLabel(placement: Placement): Text {
+function drawLabel(placement: Placement, power?: { production: number; demand: number }): Container {
   const { left, top, width, height } = bounds(placement);
+  const vertical = height > width;
+  const group = new Container();
+  group.position.set(left + width / 2, top + height / 2);
+  if (vertical) group.rotation = -Math.PI / 2;
+
   const label = new Text({
     text: MODULE_TYPES[placement.type].short,
-    style: { fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 10, fill: palette.label, letterSpacing: 1 },
+    style: { fontFamily: FONT, fontSize: 10, fill: palette.label, letterSpacing: 1 },
   });
   label.anchor.set(0.5);
-  label.position.set(left + width / 2, top + height / 2);
-  if (height > width) label.rotation = -Math.PI / 2;
   label.alpha = 0.8;
-  return label;
+  group.addChild(label);
+
+  if (power) {
+    const net = power.production - power.demand;
+    const figure = new Text({
+      text: `${net >= 0 ? "+" : "−"}${Math.abs(net).toFixed(1)} kW`,
+      style: { fontFamily: FONT, fontSize: 9, fill: net >= 0 ? palette.valid : palette.power },
+    });
+    figure.anchor.set(0.5, 0);
+    figure.position.set(0, 7);
+    label.position.set(0, -4);
+    group.addChild(figure);
+  }
+  return group;
+}
+
+/** Internal slots as a row of small pips along the module's top-left edge. */
+function drawSlots(module: PlacedModule): Graphics {
+  const { left, top } = bounds(module);
+  const g = new Graphics();
+  module.slots.forEach((equipment, i) => {
+    const x = left + 5 + i * 9;
+    const y = top + 5;
+    if (equipment) g.rect(x, y, 6, 6).fill({ color: equipmentColour[equipment] });
+    else g.rect(x + 0.5, y + 0.5, 5, 5).stroke({ width: 1, color: palette.hardpointFree });
+  });
+  return g;
+}
+
+/** Point on the module's outer edge for a port or hardpoint, plus outward and along directions. */
+function edgeFrame(point: PlacedPort) {
+  const cx = point.x * CELL + CELL / 2;
+  const cy = point.y * CELL + CELL / 2;
+  const edge = CELL / 2 - MODULE_INSET;
+  const out = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] }[point.side] as [number, number];
+  return {
+    x: cx + out[0] * edge,
+    y: cy + out[1] * edge,
+    out,
+    along: [-out[1], out[0]] as [number, number],
+  };
+}
+
+/** A rectangle starting `from` px outward from the edge, `depth` deep and `span` wide. */
+function outwardRect(point: PlacedPort, from: number, depth: number, span: number): number[] {
+  const f = edgeFrame(point);
+  const corner = (o: number, a: number) => [f.x + f.out[0] * o + f.along[0] * a, f.y + f.out[1] * o + f.along[1] * a];
+  return [...corner(from, -span / 2), ...corner(from + depth, -span / 2), ...corner(from + depth, span / 2), ...corner(from, span / 2)];
 }
 
 function drawPort(port: PlacedPort, colour: number): Graphics {
-  const cx = port.x * CELL + CELL / 2;
-  const cy = port.y * CELL + CELL / 2;
-  const edge = CELL / 2 - MODULE_INSET;
-  const g = new Graphics();
+  return new Graphics().poly(outwardRect(port, 0, PORT_DEPTH, PORT_LENGTH)).fill({ color: colour });
+}
 
-  switch (port.side) {
-    case "north":
-      g.rect(cx - PORT_LENGTH / 2, cy - edge - PORT_DEPTH, PORT_LENGTH, PORT_DEPTH);
-      break;
-    case "south":
-      g.rect(cx - PORT_LENGTH / 2, cy + edge, PORT_LENGTH, PORT_DEPTH);
-      break;
-    case "west":
-      g.rect(cx - edge - PORT_DEPTH, cy - PORT_LENGTH / 2, PORT_DEPTH, PORT_LENGTH);
-      break;
-    case "east":
-      g.rect(cx + edge, cy - PORT_LENGTH / 2, PORT_DEPTH, PORT_LENGTH);
-      break;
+function drawEmptyHardpoint(hardpoint: PlacedPort, highlight: boolean): Graphics {
+  const g = new Graphics().poly(outwardRect(hardpoint, 0, 3, 10));
+  return highlight ? g.fill({ color: palette.valid }) : g.fill({ color: palette.hardpointFree });
+}
+
+function drawBlocked(hardpoint: PlacedPort): Graphics {
+  const f = edgeFrame(hardpoint);
+  const s = 3;
+  const cx = f.x - f.out[0] * 5;
+  const cy = f.y - f.out[1] * 5;
+  return new Graphics()
+    .moveTo(cx - s, cy - s)
+    .lineTo(cx + s, cy + s)
+    .moveTo(cx + s, cy - s)
+    .lineTo(cx - s, cy + s)
+    .stroke({ width: 1.5, color: palette.invalid });
+}
+
+function drawExternal(hardpoint: PlacedPort, equipment: EquipmentTypeId): Graphics {
+  const g = new Graphics();
+  const colour = equipmentColour[equipment];
+  const f = edgeFrame(hardpoint);
+  const mount = outwardRect(hardpoint, 0, 6, 4);
+  g.poly(mount).fill({ color: palette.trussOutline });
+
+  if (equipment === "solar-panel") {
+    const panel = outwardRect(hardpoint, 6, CELL * 0.62, CELL * 0.8);
+    g.poly(panel).fill({ color: colour }).stroke({ width: 1, color: 0x9cc3ff });
+    for (const t of [0.25, 0.5, 0.75]) {
+      const a = outwardRect(hardpoint, 6 + CELL * 0.62 * t, 0, CELL * 0.8);
+      g.moveTo(a[0] as number, a[1] as number).lineTo(a[6] as number, a[7] as number);
+    }
+    g.stroke({ width: 1, color: 0x9cc3ff, alpha: 0.6 });
+  } else if (equipment === "radiator") {
+    g.poly(outwardRect(hardpoint, 6, CELL * 0.62, CELL * 0.5)).fill({ color: colour, alpha: 0.85 });
+    for (const a of [-0.15, 0, 0.15]) {
+      const fin = outwardRect(hardpoint, 8, CELL * 0.55, 0);
+      const ox = f.along[0] * CELL * a;
+      const oy = f.along[1] * CELL * a;
+      g.moveTo((fin[0] as number) + ox, (fin[1] as number) + oy).lineTo((fin[2] as number) + ox, (fin[3] as number) + oy);
+    }
+    g.stroke({ width: 1, color: palette.background, alpha: 0.5 });
+  } else {
+    const tip = { x: f.x + f.out[0] * CELL * 0.45, y: f.y + f.out[1] * CELL * 0.45 };
+    g.moveTo(f.x, f.y).lineTo(tip.x, tip.y).stroke({ width: 1.5, color: colour });
+    g.circle(tip.x, tip.y, 7).stroke({ width: 1.5, color: colour });
   }
-  return g.fill({ color: colour });
+  g.label = EQUIPMENT_TYPES[equipment].name;
+  return g;
 }
 
 function portKey(port: PlacedPort): string {
