@@ -15,6 +15,18 @@ const FULL_TOLERANCE = 1e-6;
  */
 export type RunningUpTo = number;
 
+/** Why a tier is shed, so the player can see the rule at work (ADR 0004). */
+export type ShedReason =
+  /** Sunlight can't cover it and there is no battery to draw on. */
+  | { kind: "no-supply" }
+  /** The battery is down to this tier's floor (a fraction of capacity). */
+  | { kind: "battery-floor"; floor: number }
+  /** There is enough now, but a shed tier only restarts on a full battery or sunlight alone. */
+  | { kind: "waiting-for-full-battery" };
+
+/** Shed tiers and why each is off. Running tiers are absent. */
+export type ShedTiers = Partial<Record<Priority, ShedReason>>;
+
 export interface ModulePower {
   /** kW made by its solar panels right now. */
   production: number;
@@ -30,6 +42,8 @@ export interface ModulePower {
   /** Which of its equipment is running, in the module's slot and hardpoint order. Empty mounts are false. */
   running: { slots: boolean[]; hardpoints: boolean[] };
   runningUpTo: RunningUpTo;
+  /** Why each shed tier on its network is off. */
+  shed: ShedTiers;
 }
 
 export interface NetworkPower {
@@ -44,6 +58,7 @@ export interface NetworkPower {
   /** Everything on it is running: nothing is shed. */
   supplied: boolean;
   runningUpTo: RunningUpTo;
+  shed: ShedTiers;
 }
 
 export interface PowerReport {
@@ -115,6 +130,7 @@ interface Resolved {
   capacity: number;
   packs: Pack[];
   runningUpTo: RunningUpTo;
+  shed: ShedTiers;
 }
 
 /**
@@ -156,6 +172,16 @@ function resolve(station: Station, network: Network, sunlit: boolean): Resolved 
     }
   }
 
+  const shed: ShedTiers = {};
+  for (let tier = runningUpTo + 1; tier <= LOWEST_PRIORITY; tier++) {
+    const floor = BATTERY_FLOORS[tier as Priority];
+    shed[tier as Priority] = coverable(tier)
+      ? { kind: "waiting-for-full-battery" }
+      : capacity > 0
+        ? { kind: "battery-floor", floor }
+        : { kind: "no-supply" };
+  }
+
   return {
     network,
     modules,
@@ -166,10 +192,17 @@ function resolve(station: Station, network: Network, sunlit: boolean): Resolved 
     capacity,
     packs,
     runningUpTo,
+    shed,
   };
 }
 
-function modulePower(station: Station, module: PlacedModule, sunlit: boolean, runningUpTo: RunningUpTo): ModulePower {
+function modulePower(
+  station: Station,
+  module: PlacedModule,
+  sunlit: boolean,
+  runningUpTo: RunningUpTo,
+  shed: ShedTiers,
+): ModulePower {
   const loads = loadsOf(module);
   const packs = packsOf(station, module);
   const runs = (e: keyof typeof EQUIPMENT_TYPES | null) => e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
@@ -182,6 +215,7 @@ function modulePower(station: Station, module: PlacedModule, sunlit: boolean, ru
     powered: runningUpTo >= MODULE_SYSTEMS_PRIORITY,
     running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },
     runningUpTo,
+    shed,
   };
 }
 
@@ -191,7 +225,7 @@ export function powerOf(station: Station): PowerReport {
   const modules: Record<ModuleId, ModulePower> = {};
   const networks = networksOf(station, "power").map((network): NetworkPower => {
     const r = resolve(station, network, sunlit);
-    for (const m of r.modules) modules[m.id] = modulePower(station, m, sunlit, r.runningUpTo);
+    for (const m of r.modules) modules[m.id] = modulePower(station, m, sunlit, r.runningUpTo, r.shed);
     return {
       moduleIds: network.moduleIds,
       production: r.production,
@@ -202,6 +236,7 @@ export function powerOf(station: Station): PowerReport {
       powered: r.runningUpTo >= MODULE_SYSTEMS_PRIORITY,
       supplied: r.runningUpTo >= LOWEST_PRIORITY,
       runningUpTo: r.runningUpTo,
+      shed: r.shed,
     };
   });
   const sum = (key: "production" | "demand" | "draw" | "stored" | "capacity") =>

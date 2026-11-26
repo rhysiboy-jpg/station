@@ -217,4 +217,35 @@ describe("load shedding (ADR 0004)", () => {
     // 0.9 kW systems + 4 kW of racks fits again.
     expect(powerOf(enough).supplied).toBe(true);
   });
+
+  describe("says why equipment is off", () => {
+    it("not enough power, when there is no battery to draw on", () => {
+      const station = run(createStation(), truss, solar, lifeSupport, lab, fit(3, 0, "lab-rack"), fit(3, 1, "lab-rack"), ...labRacks);
+
+      expect(powerOf(station).modules[4]?.shed[4]).toEqual({ kind: "no-supply" });
+      expect(powerOf(station).modules[4]?.shed[1]).toBeUndefined();
+    });
+
+    it("battery below the tier's floor, while it charges back up", () => {
+      const station = advance(sheddingWithBattery(), 200);
+
+      expect(powerOf(station).stored / powerOf(station).capacity).toBeLessThan(BATTERY_FLOORS[4]);
+      expect(powerOf(station).modules[4]?.shed[4]).toEqual({ kind: "battery-floor", floor: BATTERY_FLOORS[4] });
+    });
+
+    it("waiting for a full battery, once above the floor but held off by the restart gap", () => {
+      const station = advance(sheddingWithBattery(), 600);
+
+      expect(powerOf(station).stored / powerOf(station).capacity).toBeGreaterThan(BATTERY_FLOORS[4]);
+
+      expect(powerOf(station).modules[4]?.shed[4]).toEqual({ kind: "waiting-for-full-battery" });
+    });
+
+    it("battery at the tier's floor, once eclipse has run it down", () => {
+      const restarted = advanceUntil(sheddingWithBattery(), labsRunning, () => false, 3000);
+      const labsShed = advanceUntil(restarted, (s) => !labsRunning(s), () => false, 3000);
+
+      expect(powerOf(labsShed).modules[4]?.shed[4]).toEqual({ kind: "battery-floor", floor: BATTERY_FLOORS[4] });
+    });
+  });
 });

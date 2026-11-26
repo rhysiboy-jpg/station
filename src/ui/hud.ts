@@ -9,10 +9,20 @@ import {
   powerOf,
   TICKS_PER_SECOND_AT_1X,
   type EquipmentTypeId,
+  type ModulePower,
+  type Priority,
   type MountRef,
+  type ShedReason,
   type PlacedModule,
   type Station,
 } from "../sim";
+
+const TIER_NAMES: Record<Priority, string> = {
+  1: "Life-critical systems",
+  2: "Water",
+  3: "Cooling",
+  4: "Science and comms",
+};
 
 const kw = (n: number) => `${n.toFixed(1)} kW`;
 const sideName = { north: "N", east: "E", south: "S", west: "W" } as const;
@@ -39,7 +49,27 @@ export function renderStatus(station: Station): void {
     balance.className = !power.powered ? "bad" : !power.supplied || power.balance < 0 ? "warn" : "good";
   }
   text("power-flow", `${kw(power.production)} / ${kw(power.draw)}${power.draw < power.demand ? ` of ${kw(power.demand)}` : ""}`);
-  text("power-stored", power.capacity > 0 ? `${power.stored.toFixed(2)} / ${power.capacity.toFixed(0)} kWh` : "none");
+  const charge = power.capacity > 0 ? power.stored / power.capacity : 0;
+  text(
+    "power-stored",
+    power.capacity > 0 ? `${power.stored.toFixed(2)} / ${power.capacity.toFixed(0)} kWh · ${Math.round(charge * 100)}%` : "none",
+  );
+  const bar = document.getElementById("battery-bar");
+  if (bar) {
+    bar.hidden = power.capacity === 0;
+    if (!bar.querySelector(".floor")) {
+      for (const [tier, floor] of Object.entries(BATTERY_FLOORS)) {
+        if (floor === 0) continue;
+        const mark = document.createElement("span");
+        mark.className = "floor";
+        mark.style.left = `${floor * 100}%`;
+        mark.title = `${TIER_NAMES[Number(tier) as Priority]} (P${tier}) stop below ${Math.round(floor * 100)}%`;
+        bar.append(mark);
+      }
+    }
+    const fill = bar.querySelector<HTMLElement>(".fill");
+    if (fill) fill.style.width = `${charge * 100}%`;
+  }
 }
 
 export interface InspectorActions {
@@ -65,9 +95,9 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   if (power) {
     html.push(`<h3>Power</h3><dl class="totals">`);
     const status = !power.powered
-      ? `<dd class="bad">No power: dark</dd>`
+      ? `<dd class="bad">Dark: ${shedText(power.shed[1])}</dd>`
       : power.draw < power.demand
-        ? `<dd class="warn">Shedding: tier ${power.runningUpTo + 1}+ off</dd>`
+        ? `<dd class="warn">Shedding P${power.runningUpTo + 1}+</dd>`
         : `<dd class="good">Powered</dd>`;
     html.push(`<dt>Status</dt>${status}`);
     html.push(`<dt>Uses</dt><dd>${kw(power.draw)}${power.draw < power.demand ? ` of ${kw(power.demand)}` : ""}</dd>`);
@@ -83,7 +113,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     module.slots.forEach((equipment, index) => {
       html.push(
         equipment
-          ? `<li><span>${EQUIPMENT_TYPES[equipment].name}${equipmentNote(equipment, power?.running.slots[index])}</span><button type="button" data-unfit="slot:${index}">Remove</button></li>`
+          ? `<li><span>${EQUIPMENT_TYPES[equipment].name}${equipmentNote(equipment, power, power?.running.slots[index])}</span><button type="button" data-unfit="slot:${index}">Remove</button></li>`
           : `<li class="muted"><span>Empty</span></li>`,
       );
     });
@@ -99,7 +129,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
       const where = `${sideName[h.side]} face`;
       if (h.equipment) {
         html.push(
-          `<li><span>${EQUIPMENT_TYPES[h.equipment].name}${equipmentNote(h.equipment, power?.running.hardpoints[h.index])} <small>${where}</small></span><button type="button" data-unfit="hardpoint:${h.index}">Remove</button></li>`,
+          `<li><span>${EQUIPMENT_TYPES[h.equipment].name}${equipmentNote(h.equipment, power, power?.running.hardpoints[h.index])} <small>${where}</small></span><button type="button" data-unfit="hardpoint:${h.index}">Remove</button></li>`,
         );
       } else if (h.blocked) {
         html.push(`<li class="bad"><span>Blocked <small>${where}</small></span></li>`);
@@ -124,14 +154,28 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   }
 }
 
-/** Priority tier and, when shed, that it has stopped. Zero-draw equipment never needs power. */
-function equipmentNote(equipment: EquipmentTypeId, running: boolean | undefined): string {
+/** Priority tier and, when shed, why it has stopped. Zero-draw equipment never needs power. */
+function equipmentNote(equipment: EquipmentTypeId, power: ModulePower | undefined, running: boolean | undefined): string {
   const type = EQUIPMENT_TYPES[equipment];
   if (type.draw === 0) return "";
   const floor = BATTERY_FLOORS[type.priority];
   const tip = `Priority ${type.priority} of ${LOWEST_PRIORITY} (${LOWEST_PRIORITY} is shed first). Runs on batteries down to ${Math.round(floor * 100)}% charge.`;
-  const stopped = running === false ? ` <small class="bad">stopped</small>` : "";
+  const stopped = running === false ? `<br><small class="bad">Off: ${shedText(power?.shed[type.priority])}</small>` : "";
   return ` <small title="${tip}">P${type.priority}</small>${stopped}`;
+}
+
+/** Why a tier is shed, in player terms. */
+function shedText(reason: ShedReason | undefined): string {
+  switch (reason?.kind) {
+    case "no-supply":
+      return "not enough power";
+    case "battery-floor":
+      return reason.floor > 0 ? `battery below ${Math.round(reason.floor * 100)}%` : "battery empty";
+    case "waiting-for-full-battery":
+      return "waiting for full battery";
+    default:
+      return "no power";
+  }
 }
 
 function text(id: string, value: string): void {

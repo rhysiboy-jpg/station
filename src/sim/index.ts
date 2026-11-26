@@ -2,7 +2,7 @@
 export { createStation } from "./station";
 export { advance } from "./simulation";
 export { powerOf } from "./power";
-export type { PowerReport, ModulePower, NetworkPower, RunningUpTo } from "./power";
+export type { PowerReport, ModulePower, NetworkPower, RunningUpTo, ShedReason, ShedTiers } from "./power";
 export { networksOf } from "./networks";
 export type { Network } from "./networks";
 export { orbitOf, TICKS_PER_ORBIT, TICKS_PER_SECOND_AT_1X, SECONDS_PER_TICK } from "./time";
