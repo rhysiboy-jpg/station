@@ -5,12 +5,15 @@ import {
   checkPlacement,
   createStation,
   EQUIPMENT_TYPES,
+  failureOf,
   footprintOf,
   hardpointsOf,
+  orbitOf,
   MODULE_TYPES,
   sizeOf,
   TICKS_PER_SECOND_AT_1X,
   type Command,
+  type Difficulty,
   type EquipmentTypeId,
   type GridCell,
   type HardpointState,
@@ -20,7 +23,7 @@ import {
   type Rotation,
   type Station,
 } from "./sim";
-import { renderInspector, renderStatus } from "./ui/hud";
+import { renderAlerts, renderInspector, renderStatus } from "./ui/hud";
 import {
   CELL,
   drawEquipmentGhost,
@@ -89,6 +92,42 @@ function run(command: Command): boolean {
   }
   dirty = true;
   return result.ok;
+}
+
+/** Starts again from a single core node, keeping the chosen difficulty. */
+function newStation(): void {
+  const difficulty = station.difficulty;
+  station = { ...createStation(), difficulty };
+  selectedId = null;
+  abandonedSeen = false;
+  setTool(null);
+  say("");
+  dirty = true;
+}
+
+/** True once the player has dismissed the abandoned banner for this station. */
+let abandonedSeen = false;
+
+/** Abandonment is the only game over: pause and say so, once. */
+function showAbandoned(): void {
+  const banner = document.getElementById("abandoned");
+  if (!banner) return;
+  const show = station.abandoned && !abandonedSeen;
+  if (show && banner.hidden) {
+    setSpeed(0);
+    const text = document.getElementById("abandoned-text");
+    if (text) {
+      const because = {
+        temperature: "the modules they could reach had overheated",
+        o2: "the modules they could reach were short of oxygen",
+        co2: "the air in the modules they could reach had too much CO₂",
+        water: "the water had run out",
+      };
+      const why = station.abandonedBecause ? because[station.abandonedBecause] : "nowhere fit was left";
+      text.textContent = `On orbit ${orbitOf(station).orbit} the crew returned to Earth: ${why}. You can keep looking at what went wrong, or start again.`;
+    }
+  }
+  banner.hidden = !show;
 }
 
 function moduleById(id: number | null): PlacedModule | undefined {
@@ -275,6 +314,7 @@ async function start(): Promise<void> {
         selected: selectedId ?? undefined,
         showFreeHardpoints: external,
         overlay: overlay ? overlayFor(overlay, station) : undefined,
+        status: failureOf(station).modules,
       }),
     );
 
@@ -299,6 +339,14 @@ async function start(): Promise<void> {
     scene.addChild(world);
 
     renderStatus(station);
+    renderAlerts(station, {
+      select: (moduleId) => {
+        setTool(null);
+        selectedId = moduleId;
+        dirty = true;
+      },
+    });
+    showAbandoned();
     renderInspector(station, moduleById(selectedId), {
       unfit: (moduleId, mount) => run({ type: "unfit", moduleId, mount }),
       changeCrew: (moduleId, delta) =>
@@ -349,6 +397,15 @@ async function start(): Promise<void> {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-speed]")) {
     button.addEventListener("click", () => setSpeed(Number(button.dataset.speed)));
   }
+
+  const difficulty = document.getElementById("difficulty") as HTMLSelectElement;
+  difficulty.addEventListener("change", () => run({ type: "difficulty", difficulty: difficulty.value as Difficulty }));
+  document.getElementById("new-station")?.addEventListener("click", newStation);
+  document.getElementById("abandoned-new")?.addEventListener("click", newStation);
+  document.getElementById("abandoned-close")?.addEventListener("click", () => {
+    abandonedSeen = true;
+    dirty = true;
+  });
 
   let lastSpeed = 1;
   window.addEventListener("keydown", (e) => {

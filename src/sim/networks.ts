@@ -1,7 +1,7 @@
 // Networks (ADR 0003): modules sharing one resource through their connections.
 import { carries, MODULE_TYPES, type Resource } from "./content";
 import { connectionsOf } from "./placement";
-import type { ModuleId, Station } from "./station";
+import { isOffline, offlineCutsNetworks, type ModuleId, type Station } from "./station";
 
 export interface Network {
   resource: Resource;
@@ -11,7 +11,11 @@ export interface Network {
 
 /** The networks for one resource, recomputed from the current layout. */
 export function networksOf(station: Station, resource: Resource): Network[] {
-  const members = station.modules.filter((m) => carries(MODULE_TYPES[m.type], resource));
+  // On hard difficulty an offline module drops out, cutting the network in two.
+  const cut = offlineCutsNetworks(station);
+  const members = station.modules.filter(
+    (m) => carries(MODULE_TYPES[m.type], resource) && !(cut && isOffline(station, m.id)),
+  );
   const memberIds = new Set(members.map((m) => m.id));
   const neighbours = new Map<ModuleId, ModuleId[]>(members.map((m) => [m.id, []]));
   for (const { a, b } of connectionsOf(station)) {

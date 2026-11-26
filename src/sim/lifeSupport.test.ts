@@ -147,12 +147,13 @@ describe("water", () => {
     expect(water.stored).toBe(water.capacity);
   });
 
-  it("runs out within about 20 orbits for 4 crew with no recycler", () => {
-    // 4 x 3 kg a day is about 0.77 kg an orbit, against 15 kg of tanks.
+  it("is drunk at about 0.77 kg an orbit by 4 crew, so 15 kg of tanks last about 20 orbits", () => {
+    // 4 x 3 kg a day, and a day is about 15.65 orbits. (Bad air ends this station
+    // before the water runs out; failure.test.ts covers that.)
     const start = run(createStation(), habitat, lifeSupport, crew(2, 4));
+    const used = 15 - lifeSupportOf(advance(start, TICKS_PER_ORBIT * 5)).water.stored;
 
-    expect(lifeSupportOf(advance(start, TICKS_PER_ORBIT * 15)).water.stored).toBeGreaterThan(0);
-    expect(lifeSupportOf(advance(start, TICKS_PER_ORBIT * 21)).water.stored).toBe(0);
+    expect(used / 5).toBeCloseTo((4 * 3 * 92) / (24 * 60), 2);
   });
 
   it("lasts far longer with a powered recycler, which still loses part of what it treats", () => {

@@ -295,3 +295,21 @@ export const HEAT_LEAK_KW_PER_C = 0.05;
 
 /** How quickly a loop with spare capacity pulls a warm module back to the set point, in seconds. */
 export const HEAT_RECOVERY_SECONDS = 600;
+
+/**
+ * A module that stays red this long goes offline: a quarter orbit, about 30 s
+ * at 1x, so a red warning leaves time to act. Power alone never counts.
+ */
+export const OFFLINE_AFTER_TICKS = 300;
+
+/** Water below this share of tank capacity is a yellow warning for crew. */
+export const WATER_LOW_FRACTION = 0.25;
+
+export type Difficulty = "standard" | "hard";
+
+export const DIFFICULTIES: Record<Difficulty, { name: string; offlineCutsNetworks: boolean }> = {
+  /** An offline module's hull still carries power, heat, air and water through to the modules beyond. */
+  standard: { name: "Standard", offlineCutsNetworks: false },
+  /** An offline module cuts every network it sits on, splitting the station. */
+  hard: { name: "Hard", offlineCutsNetworks: true },
+};

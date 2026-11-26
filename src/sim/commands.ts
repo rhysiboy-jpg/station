@@ -1,4 +1,4 @@
-import { MODULE_TYPES, type EquipmentTypeId, type ModuleTypeId } from "./content";
+import { MODULE_TYPES, type Difficulty, type EquipmentTypeId, type ModuleTypeId } from "./content";
 import {
   clearBlockedHardpoints,
   fitEquipment,
@@ -9,7 +9,7 @@ import {
 } from "./equipment";
 import type { GridCell, Rotation } from "./geometry";
 import { checkPlacement, connectedToCore } from "./placement";
-import { bedsOf, crewOf, newModule, type ModuleId, type PlacedModule, type Station } from "./station";
+import { bedsOf, crewOf, isOffline, newModule, type ModuleId, type PlacedModule, type Station } from "./station";
 
 export type Command =
   | { type: "place"; module: ModuleTypeId; position: GridCell; rotation: Rotation }
@@ -18,6 +18,8 @@ export type Command =
   | { type: "unfit"; moduleId: ModuleId; mount: MountRef }
   /** Assign this many crew to a module. */
   | { type: "crew"; moduleId: ModuleId; headcount: number }
+  /** A station setting, not a build change: it isn't undone by undo. */
+  | { type: "difficulty"; difficulty: Difficulty }
   | { type: "undo" };
 
 export type RejectionReason =
@@ -31,6 +33,7 @@ export type RejectionReason =
   | "no-beds"
   | "unpressurised"
   | "bad-headcount"
+  | "offline"
   | MountRejection;
 
 export type CommandResult =
@@ -54,6 +57,8 @@ export function applyCommand(station: Station, command: Command): CommandResult 
       return changeEquipment(station, command);
     case "crew":
       return assignCrew(station, command);
+    case "difficulty":
+      return { ok: true, station: { ...station, difficulty: command.difficulty }, displaced: [] };
     case "undo":
       return undo(station);
   }
@@ -136,6 +141,9 @@ function assignCrew(station: Station, command: Extract<Command, { type: "crew" }
   }
   if (!Number.isInteger(command.headcount) || command.headcount < 0) {
     return { ok: false, reason: "bad-headcount", message: "Headcount must be a whole number, zero or more." };
+  }
+  if (command.headcount > module.crew && isOffline(station, module.id)) {
+    return { ok: false, reason: "offline", message: "It's offline. Crew can't go back in until it recovers." };
   }
   if (command.headcount > 0 && !MODULE_TYPES[module.type].pressurised) {
     return { ok: false, reason: "unpressurised", message: "Crew can only work in pressurised modules." };

@@ -170,6 +170,51 @@ html, body {
 .crew-control { display: flex; align-items: center; gap: 6px; }
 .crew-control button { width: auto; padding: 2px 8px; }
 
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.setting select {
+  font: inherit;
+  color: var(--ink);
+  background: #050d18;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.alerts { max-height: 180px; overflow-y: auto; flex-shrink: 0; }
+.alerts h2 { margin: 0 0 6px; }
+.alerts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.alerts li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  border-left: 3px solid var(--power);
+  text-align: left;
+}
+.alerts li.red button { border-left-color: var(--bad); }
+.alerts li.offline button { border-left-color: var(--muted); }
+
+.banner {
+  position: fixed;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px 20px;
+  background: #0d1f36;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--bad);
+  border-radius: 8px;
+  text-align: center;
+}
+.banner[hidden] { display: none; }
+.banner h2 { margin: 0 0 8px; color: var(--bad); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; }
+.banner p { margin: 0 0 14px; font-size: 12px; }
+.banner-actions { display: flex; gap: 8px; justify-content: center; }
+.banner-actions button { width: auto; }
+
 .toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
 .inspector ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

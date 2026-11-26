@@ -2,6 +2,7 @@
 import {
   AIR_LIMITS,
   BATTERY_FLOORS,
+  failureOf,
   heatOf,
   lifeSupportOf,
   TEMPERATURE_LIMITS,
@@ -17,6 +18,7 @@ import {
   type Priority,
   type MountRef,
   type ShedReason,
+  type Warning,
   type PlacedModule,
   type Station,
 } from "../sim";
@@ -101,6 +103,66 @@ export function renderStatus(station: Station): void {
   status("heat-loop", `${kw(load)} made / ${kw(capacity)} rejected`, load > capacity ? "warn" : "good");
 }
 
+const seconds = (ticks: number) => `${Math.ceil(ticks / TICKS_PER_SECOND_AT_1X)}s`;
+
+/** A warning in player terms. */
+export function warningText(w: Warning): string {
+  switch (w.condition) {
+    case "temperature":
+      return `Hot: ${w.value.toFixed(1)} °C`;
+    case "o2":
+      return `Low O₂: ${w.value.toFixed(1)} kPa`;
+    case "co2":
+      return `High CO₂: ${w.value.toFixed(2)} kPa`;
+    case "water":
+      return w.value <= 0 ? "No water" : `Water low: ${w.value.toFixed(1)} kg`;
+    case "power":
+      return w.level === "red" ? "No power" : "Shedding equipment";
+  }
+}
+
+export interface AlertActions {
+  select(moduleId: number): void;
+}
+
+/** The alerts list: every current warning and offline module, red first. */
+export function renderAlerts(station: Station, actions: AlertActions): void {
+  const panel = document.getElementById("alerts");
+  if (!panel) return;
+  const failure = failureOf(station);
+  const name = (id: number) => {
+    const module = station.modules.find((m) => m.id === id);
+    return module ? MODULE_TYPES[module.type].name : "Module";
+  };
+  const rows: string[] = [];
+  for (const [id, s] of Object.entries(failure.modules)) {
+    if (s.offline) rows.push(`<li class="offline"><button type="button" data-module="${id}"><span>${name(Number(id))}</span><span>Offline</span></button></li>`);
+  }
+  for (const w of failure.warnings) {
+    const countdown = w.level === "red" ? failure.modules[w.moduleId]?.ticksToOffline : null;
+    const detail = `${warningText(w)}${countdown != null ? ` · ${seconds(countdown)}` : ""}`;
+    rows.push(
+      `<li class="${w.level}"><button type="button" data-module="${w.moduleId}"><span>${name(w.moduleId)}</span><span>${detail}</span></button></li>`,
+    );
+  }
+  panel.hidden = rows.length === 0;
+  const markup = rows.length === 0 ? "" : `<h2>Alerts (${rows.length})</h2><ul>${rows.join("")}</ul>`;
+  if (panel.dataset.markup === markup) return;
+  panel.dataset.markup = markup;
+  const next = document.createElement("template");
+  next.innerHTML = markup;
+  if (patch(panel, next.content)) return;
+  panel.replaceChildren(next.content);
+  // One listener for the whole list, reading the row's module when clicked.
+  if (!panel.dataset.wired) {
+    panel.dataset.wired = "1";
+    panel.addEventListener("click", (e) => {
+      const button = (e.target as Element).closest<HTMLButtonElement>("[data-module]");
+      if (button) actions.select(Number(button.dataset.module));
+    });
+  }
+}
+
 const LEVEL_CLASS: Record<0 | 1 | 2, string> = { 0: "good", 1: "warn", 2: "bad" };
 
 /** 0 fine, 1 yellow, 2 red. `low` means falling below the limits is the danger. */
@@ -133,13 +195,29 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   panel.hidden = false;
   const type = MODULE_TYPES[module.type];
   const power = powerOf(station).modules[module.id];
+  const failure = failureOf(station).modules[module.id];
 
   const html: string[] = [];
   html.push(`<h2>${type.name}</h2>`);
   html.push(`<p class="muted">${type.width}×${type.height} · ${type.pressurised ? "pressurised" : "unpressurised"}</p>`);
+  if (failure && (failure.offline || failure.level !== "ok")) {
+    html.push(`<h3>Status</h3><dl class="totals">`);
+    if (failure.offline) {
+      html.push(`<dt>State</dt><dd class="bad">Offline</dd>`);
+      html.push(`<dt></dt><dd class="muted">Crew moved out. Recovers below ${TEMPERATURE_LIMITS.yellow} °C.</dd>`);
+    } else if (failure.ticksToOffline !== null) {
+      html.push(`<dt>State</dt><dd class="bad">Offline in ${seconds(failure.ticksToOffline)} at 1×</dd>`);
+    }
+    for (const w of failure.warnings) {
+      html.push(`<dt>${w.level === "red" ? "Red" : "Yellow"}</dt><dd class="${w.level === "red" ? "bad" : "warn"}">${warningText(w)}</dd>`);
+    }
+    html.push(`</dl>`);
+  }
   if (power) {
     html.push(`<h3>Power</h3><dl class="totals">`);
-    const status = !power.powered
+    const status = power.offline
+      ? `<dd class="bad">Offline</dd>`
+      : !power.powered
       ? `<dd class="bad">Dark: ${shedText(power.shed[1])}</dd>`
       : power.draw < power.demand
         ? `<dd class="warn">Shedding P${power.runningUpTo + 1}+</dd>`
