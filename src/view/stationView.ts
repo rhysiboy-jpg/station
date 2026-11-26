@@ -54,6 +54,8 @@ export interface StationDrawOptions {
   showFreeHardpoints?: boolean;
   /** A network overlay: a tint and figure per module; modules off the network are drawn dimmed. */
   overlay?: Overlay;
+  /** Warning level and offline state per module, drawn as a ring whatever the overlay. */
+  status?: Record<number, { level: "ok" | "yellow" | "red"; offline: boolean }>;
 }
 
 /** The station in grid space: (0, 0) is the corner of grid cell (0, 0). */
@@ -68,7 +70,11 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     else if (options.overlay) tint = options.overlay[module.id]?.tint;
 
     const body = drawModuleBody(module, tint, options.overlay !== undefined && tint !== undefined && tint !== palette.invalid);
-    if (options.overlay && !options.overlay[module.id]) body.alpha = 0.35;
+    const status = options.status?.[module.id];
+    if ((options.overlay && !options.overlay[module.id]) || status?.offline) body.alpha = 0.35;
+    if (status && (status.offline || status.level !== "ok")) {
+      layer.addChild(drawStatusRing(module, status.offline ? palette.offline : status.level === "red" ? palette.danger : palette.warning));
+    }
     layer.addChild(body);
     for (const port of portsOf(module)) {
       layer.addChild(drawPort(port, joined.has(portKey(port)) ? palette.portJoined : palette.portFree));
@@ -79,9 +85,18 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
       else layer.addChild(drawEmptyHardpoint(hardpoint, options.showFreeHardpoints === true));
     }
     layer.addChild(drawSlots(module));
-    layer.addChild(drawLabel(module, options.overlay?.[module.id]));
+    layer.addChild(drawLabel(module, status?.offline ? { figure: "OFFLINE", figureColour: palette.danger } : options.overlay?.[module.id]));
   }
   return layer;
+}
+
+/** A ring just outside a module: yellow or red for warnings, grey when offline. */
+function drawStatusRing(placement: Placement, colour: number): Graphics {
+  const { left, top, width, height } = bounds(placement);
+  const pad = 3;
+  return new Graphics()
+    .roundRect(left - pad, top - pad, width + pad * 2, height + pad * 2, 8)
+    .stroke({ width: 2, color: colour, alpha: 0.9 });
 }
 
 /** A translucent preview of a module that is about to be placed. */

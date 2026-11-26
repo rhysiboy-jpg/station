@@ -87,11 +87,12 @@ describe("module temperature", () => {
       truss,
       onTruss(0, "solar-panel"),
       onTruss(1, "solar-panel"),
-      onTruss(2, "radiator"),
+      onTruss(3, "radiator"), // hardpoint 2 would be blocked by the habitat
       lab,
       ...labRacks,
       habitat,
     );
+    expect(heatOf(station).networks[0]?.capacity).toBeCloseTo(3);
     const later = advance(station, HALF_DAY);
 
     expect(temperature(later, 3)).toBeGreaterThan(temperature(later, 4));

@@ -1,4 +1,4 @@
-import { MODULE_TYPES, type EquipmentTypeId } from "./content";
+import { DIFFICULTIES, MODULE_TYPES, type Difficulty, type EquipmentTypeId } from "./content";
 import type { Placement } from "./geometry";
 
 /** Only low Earth orbit exists in the prototype; GEO and sun-synchronous come with the campaign. */
@@ -44,6 +44,15 @@ export interface Station {
   water: Record<ModuleId, number>;
   /** Each module's temperature, in °C. */
   temperature: Record<ModuleId, number>;
+  /** Ticks each module has spent in red on a condition that counts towards going offline. */
+  redTicks: Record<ModuleId, number>;
+  /** Modules that are offline: they make, use and hold nothing until they recover. */
+  offline: ModuleId[];
+  /** Everyone has left. The only game over. */
+  abandoned: boolean;
+  /** What drove the crew out of the last module they had to leave, once abandoned. */
+  abandonedBecause: "temperature" | "o2" | "co2" | "water" | null;
+  difficulty: Difficulty;
   /** Earlier module layouts, most recent last, for undo. */
   history: PlacedModule[][];
 }
@@ -59,9 +68,19 @@ export function createStation(): Station {
     air: {},
     water: {},
     temperature: {},
+    redTicks: {},
+    offline: [],
+    abandoned: false,
+    abandonedBecause: null,
+    difficulty: "standard",
     history: [],
   };
 }
+
+export const isOffline = (station: Station, id: ModuleId) => station.offline.includes(id);
+
+/** Whether an offline module still carries resources through, by the station's difficulty. */
+export const offlineCutsNetworks = (station: Station) => DIFFICULTIES[station.difficulty].offlineCutsNetworks;
 
 export const crewOf = (modules: PlacedModule[]) => modules.reduce((sum, m) => sum + m.crew, 0);
 export const bedsOf = (modules: PlacedModule[]) => modules.reduce((sum, m) => sum + MODULE_TYPES[m.type].beds, 0);

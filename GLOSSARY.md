@@ -87,6 +87,10 @@ _Avoid_: Alert (the alerts list shows warnings)
 A **Module** that has failed past red: it stops working and its crew move to an attached **Pressurised** module until conditions recover.
 _Avoid_: Broken, destroyed, dead
 
+**Difficulty**:
+A station setting. On Standard an **Offline** module still carries resources through to the modules beyond it; on Hard it cuts every **Network** it sits on.
+_Avoid_: Mode (the **Sandbox** and **Campaign** are modes)
+
 **Abandoned**:
 The whole **Station** evacuated, which is the only game over.
 

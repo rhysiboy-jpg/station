@@ -2,7 +2,7 @@
 // In a shortage, equipment is shed by priority (ADR 0004).
 import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
 import { networksOf, type Network } from "./networks";
-import type { ModuleId, PlacedModule, Station } from "./station";
+import { isOffline, type ModuleId, type PlacedModule, type Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
 const HOURS_PER_TICK = SECONDS_PER_TICK / 3600;
@@ -37,8 +37,10 @@ export interface ModulePower {
   /** kWh in its batteries. */
   stored: number;
   capacity: number;
-  /** True while the module's own systems run. False means it is dark. */
+  /** True while the module's own systems run. False means it is dark, or offline. */
   powered: boolean;
+  /** Offline (failed): it draws, makes and stores nothing, whatever its network can supply. */
+  offline: boolean;
   /** Which of its equipment is running, in the module's slot and hardpoint order. Empty mounts are false. */
   running: { slots: boolean[]; hardpoints: boolean[] };
   runningUpTo: RunningUpTo;
@@ -92,7 +94,10 @@ interface Pack {
   charge: number;
 }
 
-function loadsOf(module: PlacedModule): Load[] {
+// An offline module makes, uses and stores nothing until it recovers.
+
+function loadsOf(station: Station, module: PlacedModule): Load[] {
+  if (isOffline(station, module.id)) return [];
   const equipment = [...module.slots, ...module.hardpoints].flatMap((e) => (e ? [EQUIPMENT_TYPES[e]] : []));
   return [
     { priority: MODULE_SYSTEMS_PRIORITY, kw: MODULE_TYPES[module.type].draw },
@@ -101,6 +106,7 @@ function loadsOf(module: PlacedModule): Load[] {
 }
 
 function packsOf(station: Station, module: PlacedModule): Pack[] {
+  if (isOffline(station, module.id)) return [];
   return module.slots.flatMap((equipment, slot) => {
     const capacity = equipment ? (EQUIPMENT_TYPES[equipment] as { storage?: number }).storage : undefined;
     if (!capacity) return [];
@@ -109,8 +115,8 @@ function packsOf(station: Station, module: PlacedModule): Pack[] {
   });
 }
 
-function solarOf(module: PlacedModule, sunlit: boolean): number {
-  if (!sunlit) return 0;
+function solarOf(station: Station, module: PlacedModule, sunlit: boolean): number {
+  if (!sunlit || isOffline(station, module.id)) return 0;
   return [...module.slots, ...module.hardpoints].reduce(
     (sum, e) => sum + ((e ? (EQUIPMENT_TYPES[e] as { solar?: number }).solar : undefined) ?? 0),
     0,
@@ -145,9 +151,9 @@ interface Resolved {
  */
 function resolve(station: Station, network: Network, sunlit: boolean): Resolved {
   const modules = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
-  const loads = modules.flatMap(loadsOf);
+  const loads = modules.flatMap((m) => loadsOf(station, m));
   const packs = modules.flatMap((m) => packsOf(station, m));
-  const production = modules.reduce((sum, m) => sum + solarOf(m, sunlit), 0);
+  const production = modules.reduce((sum, m) => sum + solarOf(station, m, sunlit), 0);
   const stored = packs.reduce((sum, p) => sum + p.charge, 0);
   const capacity = packs.reduce((sum, p) => sum + p.capacity, 0);
   const full = capacity > 0 && stored >= capacity - FULL_TOLERANCE;
@@ -203,16 +209,19 @@ function modulePower(
   runningUpTo: RunningUpTo,
   shed: ShedTiers,
 ): ModulePower {
-  const loads = loadsOf(module);
+  const loads = loadsOf(station, module);
   const packs = packsOf(station, module);
-  const runs = (e: keyof typeof EQUIPMENT_TYPES | null) => e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
+  const offline = isOffline(station, module.id);
+  const runs = (e: keyof typeof EQUIPMENT_TYPES | null) =>
+    !offline && e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
   return {
-    production: solarOf(module, sunlit),
+    production: solarOf(station, module, sunlit),
     demand: demandUpTo(loads, LOWEST_PRIORITY),
     draw: demandUpTo(loads, runningUpTo),
     stored: packs.reduce((sum, p) => sum + p.charge, 0),
     capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
-    powered: runningUpTo >= MODULE_SYSTEMS_PRIORITY,
+    powered: !offline && runningUpTo >= MODULE_SYSTEMS_PRIORITY,
+    offline,
     running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },
     runningUpTo,
     shed,
@@ -239,6 +248,8 @@ export function powerOf(station: Station): PowerReport {
       shed: r.shed,
     };
   });
+  // On hard difficulty an offline module belongs to no network; it still gets (empty) figures.
+  for (const m of station.modules) modules[m.id] ??= modulePower(station, m, sunlit, 0, {});
   const sum = (key: "production" | "demand" | "draw" | "stored" | "capacity") =>
     networks.reduce((total, n) => total + n[key], 0);
   return {
@@ -258,7 +269,10 @@ export function powerOf(station: Station): PowerReport {
 /** One tick of power flow on every network: shed equipment draws nothing, batteries take the difference. */
 export function stepPower(station: Station): Pick<Station, "batteries" | "powerRunningUpTo"> {
   const sunlit = orbitOf(station).phase === "day";
-  const batteries: Record<string, number> = {};
+  // Batteries in offline modules sit out of every network but keep their charge.
+  const batteries: Record<string, number> = Object.fromEntries(
+    Object.entries(station.batteries).filter(([key]) => isOffline(station, Number(key.split(":")[0]))),
+  );
   const powerRunningUpTo: Record<ModuleId, RunningUpTo> = {};
 
   for (const network of networksOf(station, "power")) {

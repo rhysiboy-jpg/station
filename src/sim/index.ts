@@ -5,6 +5,8 @@ export { powerOf } from "./power";
 export type { PowerReport, ModulePower, NetworkPower, RunningUpTo, ShedReason, ShedTiers } from "./power";
 export { lifeSupportOf } from "./lifeSupport";
 export type { LifeSupportReport, ModuleAir, WaterNetwork } from "./lifeSupport";
+export { failureOf } from "./failure";
+export type { FailureReport, ModuleStatus, Warning, Condition, Level } from "./failure";
 export { heatOf } from "./heat";
 export type { HeatReport, ModuleHeat, HeatNetwork } from "./heat";
 export { networksOf } from "./networks";
@@ -26,6 +28,8 @@ export { MODULE_TYPES, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY
   NOMINAL_O2_KPA,
   NOMINAL_TEMPERATURE,
   TEMPERATURE_LIMITS,
+  OFFLINE_AFTER_TICKS,
+  DIFFICULTIES,
 } from "./content";
 export type {
   ModuleType,
@@ -37,4 +41,5 @@ export type {
   Mount,
   Resource,
   Priority,
+  Difficulty,
 } from "./content";

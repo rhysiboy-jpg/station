@@ -13,7 +13,7 @@ import {
 import { networksOf } from "./networks";
 import { connectionsOf } from "./placement";
 import type { PowerReport } from "./power";
-import { bedsOf, crewOf, type Air, type ModuleId, type PlacedModule, type Station } from "./station";
+import { bedsOf, crewOf, isOffline, offlineCutsNetworks, type Air, type ModuleId, type PlacedModule, type Station } from "./station";
 import { SECONDS_PER_TICK } from "./time";
 
 const DAYS_PER_TICK = SECONDS_PER_TICK / 86_400;
@@ -112,7 +112,12 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
   }
 
   // Each water network: the oxygen generator splits water, crew drink, the recycler wins some back.
+  // Tanks outside every network (offline, on hard difficulty) keep what they hold.
   const water: Record<ModuleId, number> = {};
+  for (const m of station.modules) {
+    const held = station.water[m.id];
+    if (isOffline(station, m.id) && held !== undefined) water[m.id] = held;
+  }
   for (const network of networksOf(station, "water")) {
     const members = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
     const capacity = members.reduce((sum, m) => sum + MODULE_TYPES[m.type].waterTank, 0);
@@ -152,12 +157,14 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
   // Fans swap a little air across each joint between pressurised modules,
   // all computed from the same snapshot so the order of joints doesn't matter.
   const exchanged = AIR_EXCHANGE_M3_PER_S * SECONDS_PER_TICK;
+  const cut = offlineCutsNetworks(station);
   const deltas = new Map<ModuleId, Air>(pressurised.map((m) => [m.id, { o2: 0, co2: 0 }]));
   const volumes = new Map(pressurised.map((m) => [m.id, volumeOf(m)]));
   for (const { a, b } of connectionsOf(station)) {
     const airA = air[a.moduleId];
     const airB = air[b.moduleId];
     if (!airA || !airB) continue;
+    if (cut && (isOffline(station, a.moduleId) || isOffline(station, b.moduleId))) continue;
     const va = volumes.get(a.moduleId) as number;
     const vb = volumes.get(b.moduleId) as number;
     for (const gas of ["o2", "co2"] as const) {

@@ -26,6 +26,7 @@ export const palette = {
   // Warning levels, shared by every overlay.
   warning: 0xffe14d,
   danger: 0xff4d4d,
+  offline: 0x6f8db3,
 };
 
 export const equipmentColour: Record<EquipmentTypeId, number> = {

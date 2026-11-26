@@ -22,6 +22,17 @@
         <button type="button" id="remove">Remove module <kbd>X</kbd></button>
         <button type="button" id="undo">Undo <kbd>Ctrl Z</kbd></button>
       </div>
+      <h2>Station</h2>
+      <div class="list">
+        <label class="setting" title="Standard: an offline module still passes power, heat, air and water through. Hard: it cuts every network it sits on.">
+          Difficulty
+          <select id="difficulty">
+            <option value="standard">Standard</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <button type="button" id="new-station">New station</button>
+      </div>
       <p class="help">
         Click to place. Equipment: internal goes in a module's slots; external goes on a free hardpoint, so
         point at the empty cell beside one. Click a module with nothing selected to inspect it. Right-drag or
@@ -60,10 +71,19 @@
         <div class="overlays" id="overlays" role="group" aria-label="Overlay"></div>
       </section>
 
+      <section class="panel alerts" id="alerts" hidden aria-label="Alerts"></section>
       <section class="panel inspector" id="inspector" hidden aria-label="Module inspector"></section>
     </div>
 
     <p id="message" class="message" role="status" aria-live="polite"></p>
+    <div class="panel banner" id="abandoned" hidden role="alertdialog" aria-labelledby="abandoned-title">
+      <h2 id="abandoned-title">Station abandoned</h2>
+      <p id="abandoned-text">The crew had nowhere left to go and have returned to Earth.</p>
+      <div class="banner-actions">
+        <button type="button" id="abandoned-new">New station</button>
+        <button type="button" id="abandoned-close">Keep looking</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
