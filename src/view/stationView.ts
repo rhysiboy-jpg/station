@@ -11,9 +11,9 @@ import {
   type PlacedModule,
   type PlacedPort,
   type Placement,
-  type PowerReport,
   type Station,
 } from "../sim";
+import type { Overlay } from "./overlays";
 import { equipmentColour, palette } from "./palette";
 
 /** Size of one grid cell in screen pixels. */
@@ -52,8 +52,8 @@ export interface StationDrawOptions {
   selected?: number;
   /** Highlight free hardpoints (while an external equipment tool is chosen). */
   showFreeHardpoints?: boolean;
-  /** Power overlay: colour modules by whether they're powered, shedding or dark, and show their net kW. */
-  power?: PowerReport;
+  /** A network overlay: a tint and figure per module; modules off the network are drawn dimmed. */
+  overlay?: Overlay;
 }
 
 /** The station in grid space: (0, 0) is the corner of grid cell (0, 0). */
@@ -65,12 +65,11 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     let tint: number | undefined;
     if (options.removing === module.id) tint = palette.invalid;
     else if (options.selected === module.id) tint = palette.selected;
-    else if (options.power) {
-      const power = options.power.modules[module.id];
-      tint = !power?.powered ? palette.unpowered : power.draw < power.demand ? palette.shedding : palette.power;
-    }
+    else if (options.overlay) tint = options.overlay[module.id]?.tint;
 
-    layer.addChild(drawModuleBody(module, tint, options.power !== undefined && tint !== palette.invalid));
+    const body = drawModuleBody(module, tint, options.overlay !== undefined && tint !== undefined && tint !== palette.invalid);
+    if (options.overlay && !options.overlay[module.id]) body.alpha = 0.35;
+    layer.addChild(body);
     for (const port of portsOf(module)) {
       layer.addChild(drawPort(port, joined.has(portKey(port)) ? palette.portJoined : palette.portFree));
     }
@@ -80,7 +79,7 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
       else layer.addChild(drawEmptyHardpoint(hardpoint, options.showFreeHardpoints === true));
     }
     layer.addChild(drawSlots(module));
-    layer.addChild(drawLabel(module, options.power?.modules[module.id]));
+    layer.addChild(drawLabel(module, options.overlay?.[module.id]));
   }
   return layer;
 }
@@ -151,7 +150,7 @@ function drawModuleBody(placement: Placement, tint: number | undefined, outlineO
   return g;
 }
 
-function drawLabel(placement: Placement, power?: { production: number; draw: number }): Container {
+function drawLabel(placement: Placement, overlay?: { figure?: string; figureColour?: number }): Container {
   const { left, top, width, height } = bounds(placement);
   const vertical = height > width;
   const group = new Container();
@@ -166,11 +165,10 @@ function drawLabel(placement: Placement, power?: { production: number; draw: num
   label.alpha = 0.8;
   group.addChild(label);
 
-  if (power) {
-    const net = power.production - power.draw;
+  if (overlay?.figure) {
     const figure = new Text({
-      text: `${net >= 0 ? "+" : "−"}${Math.abs(net).toFixed(1)} kW`,
-      style: { fontFamily: FONT, fontSize: 9, fill: net >= 0 ? palette.valid : palette.power },
+      text: overlay.figure,
+      style: { fontFamily: FONT, fontSize: 9, fill: overlay.figureColour ?? palette.label },
     });
     figure.anchor.set(0.5, 0);
     figure.position.set(0, 7);

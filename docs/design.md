@@ -39,7 +39,7 @@ Modules joined by ports form one shared **network** per resource. Each **connect
 | Water | Water recycler, resupply | Crew, oxygen generation | Recycling below 100% |
 | Data | Lab racks | Sent to Earth by antennas | Stored on board until downlinked; in the full game, ground contact is only part of each orbit |
 
-Only **pressurised** modules join the air network.
+Only **pressurised** modules join the air network. Unlike the other resources, air isn't one shared pool: each pressurised module has its own O2 and CO2, and fans slowly mix it with attached modules, so a crowded habitat far from the scrubber goes bad first ([ADR 0005](adr/0005-per-module-air.md)). Water is pooled per network in tanks built into some modules.
 
 ### Power shortages
 
@@ -57,7 +57,12 @@ Approximate real-world values to start balancing from. Every deviation goes in a
 
 ### Balance changes
 
-_None yet._
+Every place the game departs from the reference figures, and why.
+
+- **Small water tanks.** Habitats hold 5 kg of water and life support modules 10 kg, a few bottles' worth. At real rates (about 3 kg per person per day, roughly 16 orbits a day) realistic tanks would only run dry after hundreds of orbits. With small tanks, 4 crew with no recycler run dry in about 20 orbits, so recycling matters within a sitting. _Provisional: see whether this feels right in play._
+- **Low thermal mass.** Modules take about 300 kJ to warm by 1 °C per grid cell, far less than a real module's ~10 MJ/°C. This is so 1 kW of unshed heat reaches the yellow limit in about an orbit rather than a day.
+- **Small radiators.** A radiator rejects 3 kW, against about 14 kW for an ISS radiator wing, to keep numbers at the prototype's scale.
+- **Crew rates are real**: 0.84 kg O2 used, 1 kg CO2 made and 3 kg water used per person per day, plus 100 W of body heat. CO2 builds to the yellow limit within a few orbits without a scrubber, as on the real ISS, where CO2 is the fast danger.
 
 ## Crew
 

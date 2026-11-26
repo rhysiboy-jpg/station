@@ -50,7 +50,14 @@
         <div class="battery-bar" id="battery-bar" hidden title="Battery floors: below each mark that priority tier is shed">
           <div class="fill"></div>
         </div>
-        <label class="toggle"><input type="checkbox" id="power-overlay" /> Power overlay <kbd>P</kbd></label>
+        <dl class="totals">
+          <dt>Crew</dt><dd id="crew-total">–</dd>
+          <dt>Air (worst)</dt><dd id="air-worst">–</dd>
+          <dt>Water</dt><dd id="water-total">–</dd>
+          <dt>Hottest</dt><dd id="heat-worst">–</dd>
+          <dt>Cooling</dt><dd id="heat-loop">–</dd>
+        </dl>
+        <div class="overlays" id="overlays" role="group" aria-label="Overlay"></div>
       </section>
 
       <section class="panel inspector" id="inspector" hidden aria-label="Module inspector"></section>

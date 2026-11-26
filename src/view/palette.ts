@@ -19,6 +19,13 @@ export const palette = {
   unpowered: 0xff6b6b,
   /** Some of a module's equipment has been shed. */
   shedding: 0xff9f43,
+  // Network colours for overlays (the look pass, #13, will settle these).
+  heat: 0xff8a5c,
+  air: 0x5fe3a1,
+  water: 0x5fb8ff,
+  // Warning levels, shared by every overlay.
+  warning: 0xffe14d,
+  danger: 0xff4d4d,
 };
 
 export const equipmentColour: Record<EquipmentTypeId, number> = {

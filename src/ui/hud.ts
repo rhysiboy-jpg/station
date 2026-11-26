@@ -1,6 +1,10 @@
-// HTML panels: station status (time, orbit, power totals) and the module inspector.
+// HTML panels: station status (time, orbit, totals) and the module inspector.
 import {
+  AIR_LIMITS,
   BATTERY_FLOORS,
+  heatOf,
+  lifeSupportOf,
+  TEMPERATURE_LIMITS,
   EQUIPMENT_TYPES,
   LOWEST_PRIORITY,
   hardpointsOf,
@@ -70,10 +74,51 @@ export function renderStatus(station: Station): void {
     const fill = bar.querySelector<HTMLElement>(".fill");
     if (fill) fill.style.width = `${charge * 100}%`;
   }
+
+  const life = lifeSupportOf(station);
+  status("crew-total", `${life.crew} / ${life.beds} beds`, life.beds === 0 ? "muted" : "");
+  const airs = Object.values(life.modules).filter((a) => a.crew > 0 || a.co2 > 0 || a.o2 < 20.9);
+  if (airs.length === 0) status("air-worst", "fresh", "good");
+  else {
+    const o2 = Math.min(...airs.map((a) => a.o2));
+    const co2 = Math.max(...airs.map((a) => a.co2));
+    const level = Math.max(levelOf(AIR_LIMITS.o2, o2, true), levelOf(AIR_LIMITS.co2, co2, false)) as 0 | 1 | 2;
+    status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)} kPa`, LEVEL_CLASS[level]);
+  }
+  const water = life.water;
+  const waterLevel: 0 | 1 | 2 = water.capacity === 0 ? 0 : water.stored === 0 ? 2 : water.stored < water.capacity * 0.25 ? 1 : 0;
+  status(
+    "water-total",
+    water.capacity > 0 ? `${water.stored.toFixed(1)} / ${water.capacity.toFixed(0)} kg` : "no tanks",
+    water.capacity > 0 && life.crew > 0 ? LEVEL_CLASS[waterLevel] : "muted",
+  );
+
+  const heat = heatOf(station);
+  const hottest = Math.max(...Object.values(heat.modules).map((h) => h.temperature));
+  status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, hottest, false)]);
+  const load = heat.networks.reduce((sum, n) => sum + n.load, 0);
+  const capacity = heat.networks.reduce((sum, n) => sum + n.capacity, 0);
+  status("heat-loop", `${kw(load)} made / ${kw(capacity)} rejected`, load > capacity ? "warn" : "good");
+}
+
+const LEVEL_CLASS: Record<0 | 1 | 2, string> = { 0: "good", 1: "warn", 2: "bad" };
+
+/** 0 fine, 1 yellow, 2 red. `low` means falling below the limits is the danger. */
+function levelOf(limits: { yellow: number; red: number }, value: number, low: boolean): 0 | 1 | 2 {
+  if (low) return value < limits.red ? 2 : value < limits.yellow ? 1 : 0;
+  return value >= limits.red ? 2 : value >= limits.yellow ? 1 : 0;
+}
+
+function status(id: string, value: string, className: string): void {
+  text(id, value);
+  const el = document.getElementById(id);
+  if (el && el.className !== className) el.className = className;
 }
 
 export interface InspectorActions {
   unfit(moduleId: number, mount: MountRef): void;
+  /** Add (positive) or remove (negative) crew, from the current headcount. */
+  changeCrew(moduleId: number, delta: number): void;
   close(): void;
 }
 
@@ -103,6 +148,44 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     html.push(`<dt>Uses</dt><dd>${kw(power.draw)}${power.draw < power.demand ? ` of ${kw(power.demand)}` : ""}</dd>`);
     html.push(`<dt>Makes</dt><dd>${kw(power.production)}</dd>`);
     if (power.capacity > 0) html.push(`<dt>Stores</dt><dd>${power.stored.toFixed(2)} / ${power.capacity} kWh</dd>`);
+    html.push(`</dl>`);
+  }
+
+  const life = lifeSupportOf(station);
+  const air = life.modules[module.id];
+  if (air) {
+    const room = life.beds - life.crew;
+    html.push(`<h3>Crew and air</h3><dl class="totals">`);
+    html.push(
+      `<dt>Crew</dt><dd><span class="crew-control">` +
+        `<button type="button" data-crew="-1" ${module.crew === 0 ? "disabled" : ""} aria-label="One fewer crew">−</button>` +
+        `${module.crew}` +
+        `<button type="button" data-crew="1" ${room <= 0 ? "disabled" : ""} aria-label="One more crew" title="${room <= 0 ? (life.beds === 0 ? "Build a habitat first" : "All beds taken") : `${room} bed${room === 1 ? "" : "s"} free`}">+</button>` +
+        `</span></dd>`,
+    );
+    if (type.beds > 0) html.push(`<dt>Beds</dt><dd>${type.beds}</dd>`);
+    html.push(`<dt>O₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.o2, air.o2, true)]}">${air.o2.toFixed(2)} kPa</dd>`);
+    html.push(`<dt>CO₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.co2, air.co2, false)]}">${air.co2.toFixed(2)} kPa</dd>`);
+    const network = life.water.networks.find((n) => n.moduleIds.includes(module.id));
+    if (network) {
+      html.push(
+        `<dt>Water</dt><dd>${network.stored.toFixed(1)} / ${network.capacity.toFixed(0)} kg${type.waterTank > 0 ? ` <small>(${type.waterTank} kg tank here)</small>` : ""}</dd>`,
+      );
+    }
+    html.push(`</dl>`);
+  }
+
+  const heat = heatOf(station).modules[module.id];
+  if (heat) {
+    html.push(`<h3>Heat</h3><dl class="totals">`);
+    html.push(
+      `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, heat.temperature, false)]}">${heat.temperature.toFixed(1)} °C</dd>`,
+    );
+    html.push(`<dt>Makes</dt><dd>${kw(heat.made)}</dd>`);
+    html.push(`<dt>Cooling takes</dt><dd>${kw(heat.removed)}</dd>`);
+    if (Math.abs(heat.leaked) >= 0.05) {
+      html.push(`<dt>${heat.leaked > 0 ? "Leaks out" : "Leaks in"}</dt><dd>${kw(Math.abs(heat.leaked))}</dd>`);
+    }
     html.push(`</dl>`);
   }
 
@@ -142,16 +225,62 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   html.push(`<button type="button" class="close" aria-label="Close inspector">✕</button>`);
 
   const markup = html.join("");
-  if (panel.dataset.markup === markup) return; // Avoid rebuilding (and losing hover) every frame.
+  if (panel.dataset.markup === markup) return;
   panel.dataset.markup = markup;
-  panel.innerHTML = markup;
+  // While time runs the figures change every tick. Patch them in place when the
+  // structure is unchanged, so buttons survive long enough to be clicked.
+  const next = document.createElement("template");
+  next.innerHTML = markup;
+  if (panel.dataset.module === String(module.id) && patch(panel, next.content)) return;
+  panel.dataset.module = String(module.id);
+  panel.replaceChildren(next.content);
   panel.querySelector(".close")?.addEventListener("click", actions.close);
+  for (const button of panel.querySelectorAll<HTMLButtonElement>("[data-crew]")) {
+    // The station moves on after this panel is built, so the action reads the live headcount.
+    button.addEventListener("click", () => actions.changeCrew(module.id, Number(button.dataset.crew)));
+  }
   for (const button of panel.querySelectorAll<HTMLButtonElement>("[data-unfit]")) {
     const [kind, index] = (button.dataset.unfit ?? "").split(":");
     button.addEventListener("click", () =>
       actions.unfit(module.id, { kind: kind as "slot" | "hardpoint", index: Number(index) }),
     );
   }
+}
+
+/**
+ * Brings `target`'s children in line with `source`'s if both have the same
+ * shape (same elements in the same places), changing only text and attributes.
+ * Returns false, changing nothing, if the shapes differ.
+ */
+function patch(target: Node, source: Node): boolean {
+  if (!sameShape(target, source)) return false;
+  sync(target, source);
+  return true;
+}
+
+function sameShape(a: Node, b: Node): boolean {
+  if (a.childNodes.length !== b.childNodes.length) return false;
+  for (let i = 0; i < a.childNodes.length; i++) {
+    const x = a.childNodes[i] as Node;
+    const y = b.childNodes[i] as Node;
+    if (x.nodeName !== y.nodeName || !sameShape(x, y)) return false;
+  }
+  return true;
+}
+
+function sync(target: Node, source: Node): void {
+  target.childNodes.forEach((child, i) => {
+    const from = source.childNodes[i] as Node;
+    if (child.nodeType === Node.TEXT_NODE) {
+      if (child.textContent !== from.textContent) child.textContent = from.textContent;
+    } else if (child instanceof Element && from instanceof Element) {
+      for (const attr of Array.from(child.attributes)) if (!from.hasAttribute(attr.name)) child.removeAttribute(attr.name);
+      for (const attr of Array.from(from.attributes)) {
+        if (child.getAttribute(attr.name) !== attr.value) child.setAttribute(attr.name, attr.value);
+      }
+      sync(child, from);
+    }
+  });
 }
 
 /** Priority tier and, when shed, why it has stopped. Zero-draw equipment never needs power. */
