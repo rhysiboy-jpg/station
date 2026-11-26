@@ -1,3 +1,5 @@
 # TypeScript, with the simulation core separate from rendering
 
 The game is TypeScript in the browser. The simulation is a plain TypeScript core with no rendering or DOM dependencies, fully tested on its own; the 2D view (PixiJS) only reads simulation state and sends commands to it. We chose this over Godot because it is the easiest setup to build test-first and to work on in this repo, and because 3D may come later: with the core separate, a Three.js view is a rendering swap rather than a rewrite.
+
+**Revisit after the prototype (noted 2026-11-26):** Godot was raised again. We stay on TypeScript until the prototype sandbox is finished, then reconsider Godot alongside the 3D and desktop/Steam questions. Godot's strengths are its editor, an easier path to 3D and desktop exports; the costs now would be rewriting the sim core and tests in GDScript, a weaker test-first loop, and heavier, slower web builds. Because the core has no rendering dependencies, a later move ports its rules one-for-one rather than redesigning them.
