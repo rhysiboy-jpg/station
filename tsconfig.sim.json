@@ -1,0 +1,12 @@
+{
+  // The simulation core must not use rendering or browser APIs (ADR 0001).
+  // No DOM lib and no ambient types: any `window`, `document`, `performance`
+  // or PixiJS import inside src/sim fails this typecheck.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/sim/**/*.ts"],
+  "exclude": ["src/sim/**/*.test.ts"]
+}
