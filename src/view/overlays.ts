@@ -1,0 +1,103 @@
+// Network overlays: one per resource, each turning simulation readings into a
+// tint and a short figure per module. Reads state only.
+import {
+  AIR_LIMITS,
+  heatOf,
+  lifeSupportOf,
+  MODULE_TYPES,
+  NOMINAL_TEMPERATURE,
+  powerOf,
+  TEMPERATURE_LIMITS,
+  type ModuleId,
+  type Station,
+} from "../sim";
+import { palette } from "./palette";
+
+export type OverlayKind = "power" | "heat" | "air" | "water";
+
+export const OVERLAYS: { kind: OverlayKind; name: string; key: string }[] = [
+  { kind: "power", name: "Power", key: "p" },
+  { kind: "heat", name: "Heat", key: "h" },
+  { kind: "air", name: "Air", key: "o" },
+  { kind: "water", name: "Water", key: "u" },
+];
+
+export interface ModuleOverlay {
+  tint: number;
+  figure?: string;
+  figureColour?: number;
+}
+
+/** Per module; modules not on this overlay's network are absent and drawn dimmed. */
+export type Overlay = Record<ModuleId, ModuleOverlay>;
+
+type Level = "ok" | "yellow" | "red";
+const levelTint = (level: Level, ok: number) => (level === "red" ? palette.danger : level === "yellow" ? palette.warning : ok);
+
+export function overlayFor(kind: OverlayKind, station: Station): Overlay {
+  const overlay: Overlay = {};
+  switch (kind) {
+    case "power": {
+      for (const [id, p] of Object.entries(powerOf(station).modules)) {
+        const net = p.production - p.draw;
+        overlay[Number(id)] = {
+          tint: !p.powered ? palette.unpowered : p.draw < p.demand ? palette.shedding : palette.power,
+          figure: `${net >= 0 ? "+" : "−"}${Math.abs(net).toFixed(1)} kW`,
+          figureColour: net >= 0 ? palette.valid : palette.power,
+        };
+      }
+      break;
+    }
+    case "heat": {
+      for (const [id, h] of Object.entries(heatOf(station).modules)) {
+        const level: Level =
+          h.temperature >= TEMPERATURE_LIMITS.red ? "red" : h.temperature >= TEMPERATURE_LIMITS.yellow ? "yellow" : "ok";
+        overlay[Number(id)] = {
+          tint: levelTint(level, palette.heat),
+          figure: `${h.temperature.toFixed(1)}°C`,
+          figureColour: h.temperature > NOMINAL_TEMPERATURE + 0.5 ? levelTint(level, palette.heat) : palette.label,
+        };
+      }
+      break;
+    }
+    case "air": {
+      for (const [id, a] of Object.entries(lifeSupportOf(station).modules)) {
+        const level: Level =
+          a.o2 < AIR_LIMITS.o2.red || a.co2 > AIR_LIMITS.co2.red
+            ? "red"
+            : a.o2 < AIR_LIMITS.o2.yellow || a.co2 > AIR_LIMITS.co2.yellow
+              ? "yellow"
+              : "ok";
+        // Show whichever gas is closer to its limit.
+        const co2Closer = a.co2 / AIR_LIMITS.co2.yellow > (21 - a.o2) / (21 - AIR_LIMITS.o2.yellow);
+        overlay[Number(id)] = {
+          tint: levelTint(level, palette.air),
+          figure: co2Closer ? `CO₂ ${a.co2.toFixed(2)}` : `O₂ ${a.o2.toFixed(1)}`,
+          figureColour: levelTint(level, palette.label),
+        };
+      }
+      break;
+    }
+    case "water": {
+      for (const network of lifeSupportOf(station).water.networks) {
+        const fraction = network.capacity > 0 ? network.stored / network.capacity : 0;
+        const level: Level = fraction === 0 ? "red" : fraction < 0.25 ? "yellow" : "ok";
+        // One figure per network, on the module with the biggest tank (room for the text).
+        const tankOf = (id: ModuleId) => {
+          const module = station.modules.find((m) => m.id === id);
+          return module ? MODULE_TYPES[module.type].waterTank * 100 + MODULE_TYPES[module.type].volume : 0;
+        };
+        const label = network.moduleIds.reduce((best, id) => (tankOf(id) > tankOf(best) ? id : best));
+        network.moduleIds.forEach((id) => {
+          overlay[id] = {
+            tint: levelTint(level, palette.water),
+            figure: id === label ? `${network.stored.toFixed(1)} kg` : undefined,
+            figureColour: levelTint(level, palette.label),
+          };
+        });
+      }
+      break;
+    }
+  }
+  return overlay;
+}

@@ -1,4 +1,4 @@
-import type { EquipmentTypeId, ModuleTypeId } from "./content";
+import { MODULE_TYPES, type EquipmentTypeId, type ModuleTypeId } from "./content";
 import {
   clearBlockedHardpoints,
   fitEquipment,
@@ -9,13 +9,15 @@ import {
 } from "./equipment";
 import type { GridCell, Rotation } from "./geometry";
 import { checkPlacement, connectedToCore } from "./placement";
-import { newModule, type ModuleId, type PlacedModule, type Station } from "./station";
+import { bedsOf, crewOf, newModule, type ModuleId, type PlacedModule, type Station } from "./station";
 
 export type Command =
   | { type: "place"; module: ModuleTypeId; position: GridCell; rotation: Rotation }
   | { type: "remove"; moduleId: ModuleId }
   | { type: "fit"; moduleId: ModuleId; mount: MountRef; equipment: EquipmentTypeId }
   | { type: "unfit"; moduleId: ModuleId; mount: MountRef }
+  /** Assign this many crew to a module. */
+  | { type: "crew"; moduleId: ModuleId; headcount: number }
   | { type: "undo" };
 
 export type RejectionReason =
@@ -25,6 +27,10 @@ export type RejectionReason =
   | "core-node"
   | "no-such-module"
   | "nothing-to-undo"
+  | "crew-aboard"
+  | "no-beds"
+  | "unpressurised"
+  | "bad-headcount"
   | MountRejection;
 
 export type CommandResult =
@@ -46,6 +52,8 @@ export function applyCommand(station: Station, command: Command): CommandResult 
     case "fit":
     case "unfit":
       return changeEquipment(station, command);
+    case "crew":
+      return assignCrew(station, command);
     case "undo":
       return undo(station);
   }
@@ -74,7 +82,13 @@ function remove(station: Station, moduleId: ModuleId): CommandResult {
     return { ok: false, reason: "core-node", message: "The core node is the seed of the station and can't be removed." };
   }
 
+  if ((station.modules[index]?.crew ?? 0) > 0) {
+    return { ok: false, reason: "crew-aboard", message: "Move its crew out before removing it." };
+  }
   const remaining = station.modules.filter((m) => m.id !== moduleId);
+  if (crewOf(remaining) > bedsOf(remaining)) {
+    return { ok: false, reason: "no-beds", message: "The crew would have nowhere to sleep. Reduce the headcount first." };
+  }
   if (connectedToCore(remaining).size !== remaining.length) {
     return {
       ok: false,
@@ -112,6 +126,29 @@ function changeEquipment(
   if (!result.ok) return result;
 
   const modules = station.modules.map((m) => (m.id === module.id ? result.module : m));
+  return { ok: true, station: withBuildChange(station, modules, station.nextModuleId), displaced: [] };
+}
+
+function assignCrew(station: Station, command: Extract<Command, { type: "crew" }>): CommandResult {
+  const module = station.modules.find((m) => m.id === command.moduleId);
+  if (!module) {
+    return { ok: false, reason: "no-such-module", message: "There is no module there." };
+  }
+  if (!Number.isInteger(command.headcount) || command.headcount < 0) {
+    return { ok: false, reason: "bad-headcount", message: "Headcount must be a whole number, zero or more." };
+  }
+  if (command.headcount > 0 && !MODULE_TYPES[module.type].pressurised) {
+    return { ok: false, reason: "unpressurised", message: "Crew can only work in pressurised modules." };
+  }
+  const modules = station.modules.map((m) => (m.id === module.id ? { ...m, crew: command.headcount } : m));
+  if (crewOf(modules) > bedsOf(modules)) {
+    const beds = bedsOf(modules);
+    return {
+      ok: false,
+      reason: "no-beds",
+      message: beds === 0 ? "Build a habitat first: crew need somewhere to sleep." : `The station's habitats sleep ${beds}.`,
+    };
+  }
   return { ok: true, station: withBuildChange(station, modules, station.nextModuleId), displaced: [] };
 }
 

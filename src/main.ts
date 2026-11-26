@@ -8,7 +8,6 @@ import {
   footprintOf,
   hardpointsOf,
   MODULE_TYPES,
-  powerOf,
   sizeOf,
   TICKS_PER_SECOND_AT_1X,
   type Command,
@@ -30,6 +29,7 @@ import {
   drawModuleOutline,
   drawStation,
 } from "./view/stationView";
+import { overlayFor, OVERLAYS, type OverlayKind } from "./view/overlays";
 import { equipmentColour, palette } from "./view/palette";
 
 type Tool =
@@ -49,7 +49,7 @@ let rotation: Rotation = 0;
 let hover: GridCell | null = null;
 let selectedId: number | null = null;
 let speed = 1;
-let showPower = false;
+let overlay: OverlayKind | null = null;
 /** Screen offset of grid cell (0, 0)'s corner from the centre of the view. */
 const camera = { x: -CELL / 2, y: -CELL / 2 };
 let dirty = true;
@@ -58,7 +58,7 @@ const message = document.getElementById("message") as HTMLElement;
 const modulesEl = document.getElementById("modules") as HTMLElement;
 const equipmentEl = document.getElementById("equipment") as HTMLElement;
 const removeButton = document.getElementById("remove") as HTMLButtonElement;
-const overlayToggle = document.getElementById("power-overlay") as HTMLInputElement;
+const overlaysEl = document.getElementById("overlays") as HTMLElement;
 
 let stickyUntil = 0;
 
@@ -158,13 +158,25 @@ function setSpeed(next: number): void {
   }
 }
 
-function setOverlay(on: boolean): void {
-  showPower = on;
-  overlayToggle.checked = on;
+/** Shows an overlay, or hides it if it is already showing. */
+function toggleOverlay(kind: OverlayKind): void {
+  overlay = overlay === kind ? null : kind;
+  for (const button of overlaysEl.querySelectorAll<HTMLButtonElement>("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.overlay === overlay));
+  }
   dirty = true;
 }
 
 function buildPalettes(): void {
+  for (const { kind, name, key } of OVERLAYS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.overlay = kind;
+    button.setAttribute("aria-pressed", "false");
+    button.innerHTML = `${name} <kbd>${key.toUpperCase()}</kbd>`;
+    button.addEventListener("click", () => toggleOverlay(kind));
+    overlaysEl.appendChild(button);
+  }
   (Object.keys(MODULE_TYPES) as ModuleTypeId[]).forEach((id, index) => {
     const type = MODULE_TYPES[id];
     const button = document.createElement("button");
@@ -262,7 +274,7 @@ async function start(): Promise<void> {
         removing: tool?.kind === "remove" ? hovered?.id : undefined,
         selected: selectedId ?? undefined,
         showFreeHardpoints: external,
-        power: showPower ? powerOf(station) : undefined,
+        overlay: overlay ? overlayFor(overlay, station) : undefined,
       }),
     );
 
@@ -289,6 +301,8 @@ async function start(): Promise<void> {
     renderStatus(station);
     renderInspector(station, moduleById(selectedId), {
       unfit: (moduleId, mount) => run({ type: "unfit", moduleId, mount }),
+      changeCrew: (moduleId, delta) =>
+        run({ type: "crew", moduleId, headcount: (moduleById(moduleId)?.crew ?? 0) + delta }),
       close: () => {
         selectedId = null;
         dirty = true;
@@ -335,7 +349,6 @@ async function start(): Promise<void> {
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-speed]")) {
     button.addEventListener("click", () => setSpeed(Number(button.dataset.speed)));
   }
-  overlayToggle.addEventListener("change", () => setOverlay(overlayToggle.checked));
 
   let lastSpeed = 1;
   window.addEventListener("keydown", (e) => {
@@ -353,7 +366,7 @@ async function start(): Promise<void> {
         setSpeed(0);
       }
     } else if (key === "r") rotation = ROTATIONS[(ROTATIONS.indexOf(rotation) + 1) % 4] as Rotation;
-    else if (key === "p") setOverlay(!showPower);
+    else if (OVERLAYS.some((o) => o.key === key)) toggleOverlay(OVERLAYS.find((o) => o.key === key)?.kind as OverlayKind);
     else if (key === "x" || key === "delete") setTool(tool?.kind === "remove" ? null : { kind: "remove" });
     else if (key === "escape") {
       setTool(null);
