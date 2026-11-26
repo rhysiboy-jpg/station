@@ -52,7 +52,7 @@ export interface StationDrawOptions {
   selected?: number;
   /** Highlight free hardpoints (while an external equipment tool is chosen). */
   showFreeHardpoints?: boolean;
-  /** Power overlay: colour modules by whether they're powered and show their net kW. */
+  /** Power overlay: colour modules by whether they're powered, shedding or dark, and show their net kW. */
   power?: PowerReport;
 }
 
@@ -65,7 +65,10 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     let tint: number | undefined;
     if (options.removing === module.id) tint = palette.invalid;
     else if (options.selected === module.id) tint = palette.selected;
-    else if (options.power) tint = options.power.modules[module.id]?.powered ? palette.power : palette.unpowered;
+    else if (options.power) {
+      const power = options.power.modules[module.id];
+      tint = !power?.powered ? palette.unpowered : power.draw < power.demand ? palette.shedding : palette.power;
+    }
 
     layer.addChild(drawModuleBody(module, tint, options.power !== undefined && tint !== palette.invalid));
     for (const port of portsOf(module)) {
@@ -148,7 +151,7 @@ function drawModuleBody(placement: Placement, tint: number | undefined, outlineO
   return g;
 }
 
-function drawLabel(placement: Placement, power?: { production: number; demand: number }): Container {
+function drawLabel(placement: Placement, power?: { production: number; draw: number }): Container {
   const { left, top, width, height } = bounds(placement);
   const vertical = height > width;
   const group = new Container();
@@ -164,7 +167,7 @@ function drawLabel(placement: Placement, power?: { production: number; demand: n
   group.addChild(label);
 
   if (power) {
-    const net = power.production - power.demand;
+    const net = power.production - power.draw;
     const figure = new Text({
       text: `${net >= 0 ? "+" : "−"}${Math.abs(net).toFixed(1)} kW`,
       style: { fontFamily: FONT, fontSize: 9, fill: net >= 0 ? palette.valid : palette.power },

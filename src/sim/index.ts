@@ -2,7 +2,7 @@
 export { createStation } from "./station";
 export { advance } from "./simulation";
 export { powerOf } from "./power";
-export type { PowerReport, ModulePower, NetworkPower } from "./power";
+export type { PowerReport, ModulePower, NetworkPower, RunningUpTo } from "./power";
 export { networksOf } from "./networks";
 export type { Network } from "./networks";
 export { orbitOf, TICKS_PER_ORBIT, TICKS_PER_SECOND_AT_1X, SECONDS_PER_TICK } from "./time";
@@ -16,7 +16,7 @@ export { checkPlacement, connectionsOf } from "./placement";
 export type { PlacementCheck, Connection, ConnectionEnd } from "./placement";
 export { footprintOf, portsOf, sizeOf } from "./geometry";
 export type { GridCell, PlacedPort, Placement, Rotation } from "./geometry";
-export { MODULE_TYPES, EQUIPMENT_TYPES } from "./content";
+export { MODULE_TYPES, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, BATTERY_FLOORS } from "./content";
 export type {
   ModuleType,
   ModuleTypeId,
@@ -26,4 +26,5 @@ export type {
   EquipmentTypeId,
   Mount,
   Resource,
+  Priority,
 } from "./content";

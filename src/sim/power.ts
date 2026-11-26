@@ -1,31 +1,63 @@
 // Power: solar panels make it in Day, batteries store it, everything powered draws it.
-import { EQUIPMENT_TYPES, MODULE_TYPES } from "./content";
+// In a shortage, equipment is shed by priority (ADR 0004).
+import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
 import { networksOf, type Network } from "./networks";
 import type { ModuleId, PlacedModule, Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
 const HOURS_PER_TICK = SECONDS_PER_TICK / 3600;
+/** Batteries count as full within this much of capacity (kWh), to absorb rounding. */
+const FULL_TOLERANCE = 1e-6;
+
+/**
+ * Equipment with priority up to this number runs; 0 means nothing does,
+ * not even the modules' own systems.
+ */
+export type RunningUpTo = number;
 
 export interface ModulePower {
   /** kW made by its solar panels right now. */
   production: number;
-  /** kW drawn by the module and its equipment. */
+  /** kW the module and its equipment would draw with everything running. */
   demand: number;
+  /** kW actually drawn: demand less whatever has been shed. */
+  draw: number;
   /** kWh in its batteries. */
   stored: number;
   capacity: number;
-  /** False when its network can't meet demand from sunlight and storage: its equipment has stopped. */
+  /** True while the module's own systems run. False means it is dark. */
   powered: boolean;
+  /** Which of its equipment is running, in the module's slot and hardpoint order. Empty mounts are false. */
+  running: { slots: boolean[]; hardpoints: boolean[] };
+  runningUpTo: RunningUpTo;
 }
 
-export interface NetworkPower extends Omit<ModulePower, "powered"> {
+export interface NetworkPower {
   moduleIds: ModuleId[];
+  production: number;
+  demand: number;
+  draw: number;
+  stored: number;
+  capacity: number;
+  /** Its modules' own systems are running. */
   powered: boolean;
+  /** Everything on it is running: nothing is shed. */
+  supplied: boolean;
+  runningUpTo: RunningUpTo;
 }
 
-export interface PowerReport extends Omit<NetworkPower, "moduleIds"> {
-  /** production - demand, in kW. Negative means batteries are draining. */
+export interface PowerReport {
+  production: number;
+  demand: number;
+  draw: number;
+  /** production - draw, in kW. Negative means batteries are draining. */
   balance: number;
+  stored: number;
+  capacity: number;
+  /** Every network keeps its modules' own systems running. */
+  powered: boolean;
+  /** Every network runs everything: nothing anywhere is shed. */
+  supplied: boolean;
   networks: NetworkPower[];
   modules: Record<ModuleId, ModulePower>;
 }
@@ -34,105 +66,176 @@ export function batteryKey(moduleId: ModuleId, slot: number): string {
   return `${moduleId}:${slot}`;
 }
 
-interface Battery {
-  key: string;
-  capacity: number;
+interface Load {
+  priority: number;
+  kw: number;
 }
 
-function batteriesIn(module: PlacedModule): Battery[] {
+interface Pack {
+  key: string;
+  capacity: number;
+  charge: number;
+}
+
+function loadsOf(module: PlacedModule): Load[] {
+  const equipment = [...module.slots, ...module.hardpoints].flatMap((e) => (e ? [EQUIPMENT_TYPES[e]] : []));
+  return [
+    { priority: MODULE_SYSTEMS_PRIORITY, kw: MODULE_TYPES[module.type].draw },
+    ...equipment.map((e) => ({ priority: e.priority, kw: e.draw })),
+  ];
+}
+
+function packsOf(station: Station, module: PlacedModule): Pack[] {
   return module.slots.flatMap((equipment, slot) => {
-    const storage = equipment ? (EQUIPMENT_TYPES[equipment] as { storage?: number }).storage : undefined;
-    return storage ? [{ key: batteryKey(module.id, slot), capacity: storage }] : [];
+    const capacity = equipment ? (EQUIPMENT_TYPES[equipment] as { storage?: number }).storage : undefined;
+    if (!capacity) return [];
+    const key = batteryKey(module.id, slot);
+    return [{ key, capacity, charge: Math.min(station.batteries[key] ?? 0, capacity) }];
   });
 }
 
-function moduleFigures(station: Station, module: PlacedModule, sunlit: boolean) {
-  const equipment = [...module.slots, ...module.hardpoints].flatMap((e) => (e ? [EQUIPMENT_TYPES[e]] : []));
-  const batteries = batteriesIn(module);
+function solarOf(module: PlacedModule, sunlit: boolean): number {
+  if (!sunlit) return 0;
+  return [...module.slots, ...module.hardpoints].reduce(
+    (sum, e) => sum + ((e ? (EQUIPMENT_TYPES[e] as { solar?: number }).solar : undefined) ?? 0),
+    0,
+  );
+}
+
+const demandUpTo = (loads: Load[], upTo: RunningUpTo) =>
+  loads.reduce((sum, l) => (l.priority <= upTo ? sum + l.kw : sum), 0);
+
+interface Resolved {
+  network: Network;
+  modules: PlacedModule[];
+  production: number;
+  demand: number;
+  draw: number;
+  stored: number;
+  capacity: number;
+  packs: Pack[];
+  runningUpTo: RunningUpTo;
+}
+
+/**
+ * Decides what runs on one network for the coming tick.
+ *
+ * Shedding: from what ran last tick, drop the lowest-priority tiers until the
+ * rest can be covered for one tick by sunlight plus the charge above the
+ * lowest running tier's battery floor.
+ * Restarting: a shed tier comes back only once sunlight alone covers it, or
+ * the batteries are full and can cover it. That gap stops equipment flickering
+ * on and off as a battery gains a little charge.
+ */
+function resolve(station: Station, network: Network, sunlit: boolean): Resolved {
+  const modules = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
+  const loads = modules.flatMap(loadsOf);
+  const packs = modules.flatMap((m) => packsOf(station, m));
+  const production = modules.reduce((sum, m) => sum + solarOf(m, sunlit), 0);
+  const stored = packs.reduce((sum, p) => sum + p.charge, 0);
+  const capacity = packs.reduce((sum, p) => sum + p.capacity, 0);
+  const full = capacity > 0 && stored >= capacity - FULL_TOLERANCE;
+
+  // Sunlight first; any deficit comes from batteries, but only down to the tier's floor.
+  const coverable = (upTo: RunningUpTo) => {
+    const deficit = (demandUpTo(loads, upTo) - production) * HOURS_PER_TICK;
+    return deficit <= 0 || deficit <= stored - BATTERY_FLOORS[upTo as Priority] * capacity;
+  };
+  const bySunlight = (upTo: RunningUpTo) => demandUpTo(loads, upTo) <= production;
+
+  // A network that just formed, or gained modules, is held to the most shed of its members.
+  const previous = Math.min(
+    LOWEST_PRIORITY,
+    ...network.moduleIds.map((id) => station.powerRunningUpTo[id] ?? LOWEST_PRIORITY),
+  );
+  let runningUpTo = previous;
+  while (runningUpTo > 0 && !coverable(runningUpTo)) runningUpTo--;
+  if (runningUpTo === previous) {
+    for (let upTo = previous + 1; upTo <= LOWEST_PRIORITY; upTo++) {
+      if (bySunlight(upTo) || (full && coverable(upTo))) runningUpTo = upTo;
+    }
+  }
+
   return {
-    production: sunlit ? equipment.reduce((sum, e) => sum + ((e as { solar?: number }).solar ?? 0), 0) : 0,
-    demand: MODULE_TYPES[module.type].draw + equipment.reduce((sum, e) => sum + e.draw, 0),
-    stored: batteries.reduce((sum, b) => sum + (station.batteries[b.key] ?? 0), 0),
-    capacity: batteries.reduce((sum, b) => sum + b.capacity, 0),
-    batteries,
+    network,
+    modules,
+    production,
+    demand: demandUpTo(loads, LOWEST_PRIORITY),
+    draw: demandUpTo(loads, runningUpTo),
+    stored,
+    capacity,
+    packs,
+    runningUpTo,
   };
 }
 
-/** Current power figures for the station, each network and each module. */
+function modulePower(station: Station, module: PlacedModule, sunlit: boolean, runningUpTo: RunningUpTo): ModulePower {
+  const loads = loadsOf(module);
+  const packs = packsOf(station, module);
+  const runs = (e: keyof typeof EQUIPMENT_TYPES | null) => e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
+  return {
+    production: solarOf(module, sunlit),
+    demand: demandUpTo(loads, LOWEST_PRIORITY),
+    draw: demandUpTo(loads, runningUpTo),
+    stored: packs.reduce((sum, p) => sum + p.charge, 0),
+    capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
+    powered: runningUpTo >= MODULE_SYSTEMS_PRIORITY,
+    running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },
+    runningUpTo,
+  };
+}
+
+/** Current power figures for the station, each network and each module: what runs this coming tick. */
 export function powerOf(station: Station): PowerReport {
   const sunlit = orbitOf(station).phase === "day";
   const modules: Record<ModuleId, ModulePower> = {};
   const networks = networksOf(station, "power").map((network): NetworkPower => {
-    const totals = { production: 0, demand: 0, stored: 0, capacity: 0 };
-    const figures = network.moduleIds.map((id) => {
-      const module = station.modules.find((m) => m.id === id) as PlacedModule;
-      const { batteries: _unused, ...rest } = moduleFigures(station, module, sunlit);
-      totals.production += rest.production;
-      totals.demand += rest.demand;
-      totals.stored += rest.stored;
-      totals.capacity += rest.capacity;
-      return [id, rest] as const;
-    });
-    const powered = canCover(totals.production - totals.demand, totals.stored);
-    for (const [id, rest] of figures) modules[id] = { ...rest, powered };
-    return { ...totals, moduleIds: network.moduleIds, powered };
+    const r = resolve(station, network, sunlit);
+    for (const m of r.modules) modules[m.id] = modulePower(station, m, sunlit, r.runningUpTo);
+    return {
+      moduleIds: network.moduleIds,
+      production: r.production,
+      demand: r.demand,
+      draw: r.draw,
+      stored: r.stored,
+      capacity: r.capacity,
+      powered: r.runningUpTo >= MODULE_SYSTEMS_PRIORITY,
+      supplied: r.runningUpTo >= LOWEST_PRIORITY,
+      runningUpTo: r.runningUpTo,
+    };
   });
-  const sum = (key: "production" | "demand" | "stored" | "capacity") =>
+  const sum = (key: "production" | "demand" | "draw" | "stored" | "capacity") =>
     networks.reduce((total, n) => total + n[key], 0);
   return {
     production: sum("production"),
     demand: sum("demand"),
-    balance: sum("production") - sum("demand"),
+    draw: sum("draw"),
+    balance: sum("production") - sum("draw"),
     stored: sum("stored"),
     capacity: sum("capacity"),
     powered: networks.every((n) => n.powered),
+    supplied: networks.every((n) => n.supplied),
     networks,
     modules,
   };
 }
 
-/** A network is powered for the next tick if sunlight plus storage covers its demand. */
-function canCover(surplusKw: number, storedKwh: number): boolean {
-  return surplusKw >= 0 || storedKwh >= -surplusKw * HOURS_PER_TICK;
-}
-
-/** One tick of power flow on every network: batteries charge from surplus and cover deficits. */
-export function stepPower(station: Station): Pick<Station, "batteries"> {
+/** One tick of power flow on every network: shed equipment draws nothing, batteries take the difference. */
+export function stepPower(station: Station): Pick<Station, "batteries" | "powerRunningUpTo"> {
   const sunlit = orbitOf(station).phase === "day";
   const batteries: Record<string, number> = {};
+  const powerRunningUpTo: Record<ModuleId, RunningUpTo> = {};
 
   for (const network of networksOf(station, "power")) {
-    const { surplus, packs } = gather(station, network, sunlit);
-    let energy = surplus * HOURS_PER_TICK;
-
-    if (energy >= 0) {
-      for (const pack of packs) {
-        const added = Math.min(energy, pack.capacity - pack.charge);
-        pack.charge += added;
-        energy -= added;
-      }
-    } else {
-      for (const pack of packs) {
-        const taken = Math.min(-energy, pack.charge);
-        pack.charge -= taken;
-        energy += taken;
-      }
+    const r = resolve(station, network, sunlit);
+    let energy = (r.production - r.draw) * HOURS_PER_TICK;
+    for (const pack of r.packs) {
+      const change = energy >= 0 ? Math.min(energy, pack.capacity - pack.charge) : -Math.min(-energy, pack.charge);
+      pack.charge += change;
+      energy -= change;
+      batteries[pack.key] = pack.charge;
     }
-    for (const pack of packs) batteries[pack.key] = pack.charge;
+    for (const id of network.moduleIds) powerRunningUpTo[id] = r.runningUpTo;
   }
-  return { batteries };
-}
-
-function gather(station: Station, network: Network, sunlit: boolean) {
-  let surplus = 0;
-  const packs: { key: string; capacity: number; charge: number }[] = [];
-  for (const id of network.moduleIds) {
-    const module = station.modules.find((m) => m.id === id) as PlacedModule;
-    const figures = moduleFigures(station, module, sunlit);
-    surplus += figures.production - figures.demand;
-    for (const b of figures.batteries) {
-      packs.push({ ...b, charge: Math.min(station.batteries[b.key] ?? 0, b.capacity) });
-    }
-  }
-  return { surplus, packs };
+  return { batteries, powerRunningUpTo };
 }

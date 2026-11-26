@@ -22,6 +22,11 @@ export interface Station {
   nextModuleId: ModuleId;
   /** Charge in each battery, in kWh, keyed by module and slot. */
   batteries: Record<string, number>;
+  /**
+   * The load-shedding tier each module's power network ran at last tick
+   * (ADR 0004). Missing means nothing has been shed.
+   */
+  powerRunningUpTo: Record<ModuleId, number>;
   /** Earlier module layouts, most recent last, for undo. */
   history: PlacedModule[][];
 }
@@ -33,6 +38,7 @@ export function createStation(): Station {
     modules: [newModule(1, { type: "core-node", position: { x: 0, y: 0 }, rotation: 0 })],
     nextModuleId: 2,
     batteries: {},
+    powerRunningUpTo: {},
     history: [],
   };
 }

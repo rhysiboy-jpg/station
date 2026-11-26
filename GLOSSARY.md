@@ -69,6 +69,10 @@ _Avoid_: Night (fine in UI text), dark side
 **Downlink**:
 Sending stored data to Earth through an antenna.
 
+**Shed**:
+Switched off to save power. In a shortage, **Equipment** is shed by priority tier, lowest first, and restarts once there is enough power again.
+_Avoid_: Brownout, load-dump
+
 **Headcount**:
 The number of crew assigned to a **Module**. Crew are abstract in the prototype.
 _Avoid_: Population, staff

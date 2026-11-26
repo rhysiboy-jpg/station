@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   advance,
+  BATTERY_FLOORS,
+  LOWEST_PRIORITY,
   applyCommand,
   createStation,
   networksOf,
@@ -106,5 +108,113 @@ describe("without enough power", () => {
     const unpowered = advance(createStation(), 10);
 
     expect(powerOf(run(unpowered, truss, solar)).powered).toBe(true);
+  });
+});
+
+describe("load shedding (ADR 0004)", () => {
+  // Core node (1), truss (2) with one 5.4 kW panel, a life support module (3)
+  // south of the core and a lab (4) north of it.
+  const lifeSupport: Command = { type: "place", module: "life-support", position: { x: 0, y: 1 }, rotation: 0 };
+  const lab: Command = { type: "place", module: "lab", position: { x: -1, y: -2 }, rotation: 0 };
+  const fit = (moduleId: number, index: number, equipment: "oxygen-generator" | "water-recycler" | "lab-rack" | "battery"): Command => ({
+    type: "fit",
+    moduleId,
+    mount: { kind: "slot", index },
+    equipment,
+  });
+  const labRacks = [0, 1, 2, 3].map((i) => fit(4, i, "lab-rack"));
+
+  /** Runs until `done` holds, failing if `never` holds first or the limit is reached. */
+  function advanceUntil(station: Station, done: (s: Station) => boolean, never: (s: Station) => boolean, limit: number): Station {
+    let current = station;
+    for (let i = 0; i < limit; i++) {
+      if (done(current)) return current;
+      if (never(current)) throw new Error(`unexpected state at tick ${current.tick}`);
+      current = advance(current, 1);
+    }
+    throw new Error(`not reached within ${limit} ticks`);
+  }
+  const labsRunning = (s: Station) => powerOf(s).modules[4]?.running.slots.every(Boolean) ?? false;
+
+  it("stops the lowest priority equipment first and keeps life support running", () => {
+    // Demand 8.2 kW against 5.4 kW of sun: the lab racks (lowest priority) must go.
+    const station = run(
+      createStation(),
+      truss,
+      solar,
+      lifeSupport,
+      lab,
+      fit(3, 0, "oxygen-generator"),
+      fit(3, 1, "water-recycler"),
+      fit(3, 2, "lab-rack"),
+      ...labRacks,
+    );
+    const power = powerOf(station);
+
+    expect(power.demand).toBeCloseTo(8.2);
+    expect(power.modules[3]?.running.slots).toEqual([true, true, false]);
+    expect(power.modules[4]?.running.slots).toEqual([false, false, false, false]);
+    expect(power.modules[4]?.powered).toBe(true);
+    expect(power.powered).toBe(true);
+    expect(power.supplied).toBe(false);
+    expect(power.draw).toBeCloseTo(3.2);
+  });
+
+  // Lab (4 racks) and life support (2 racks) on 5.4 kW of sun: 6.9 kW demand,
+  // 0.9 kW of it module systems, so 4.5 kW is left to charge the core's battery.
+  const sheddingWithBattery = () =>
+    run(
+      createStation(),
+      truss,
+      solar,
+      fit(1, 0, "battery"),
+      lifeSupport,
+      lab,
+      fit(3, 0, "lab-rack"),
+      fit(3, 1, "lab-rack"),
+      ...labRacks,
+    );
+
+  it("lets shed equipment stay off while the battery charges, rather than flicker", () => {
+    const station = advance(sheddingWithBattery(), 200);
+
+    expect(labsRunning(station)).toBe(false);
+    expect(powerOf(station).stored).toBeGreaterThan(0);
+  });
+
+  it("restarts shed equipment once the batteries are full", () => {
+    const restarted = advanceUntil(sheddingWithBattery(), labsRunning, () => false, 3000);
+    const before = advance(sheddingWithBattery(), restarted.tick - 1);
+
+    expect(labsRunning(before)).toBe(false);
+    expect(powerOf(restarted).stored).toBeCloseTo(powerOf(restarted).capacity, 1);
+  });
+
+  it("sheds each tier at its battery floor in eclipse, so life support outlasts the labs", () => {
+    const restarted = advanceUntil(sheddingWithBattery(), labsRunning, () => false, 3000);
+    const upTo = (s: Station) => powerOf(s).networks[0]?.runningUpTo ?? 0;
+    const labsShed = advanceUntil(restarted, (s) => upTo(s) < LOWEST_PRIORITY, () => false, 3000);
+    const fraction = (s: Station) => powerOf(s).stored / powerOf(s).capacity;
+
+    expect(orbitOf(labsShed).phase).toBe("eclipse");
+    expect(fraction(labsShed)).toBeCloseTo(BATTERY_FLOORS[4], 2);
+    // The half held back carries the module systems to sunrise without going dark.
+    const sunrise = advanceUntil(labsShed, (s) => orbitOf(s).phase === "day", (s) => !powerOf(s).powered, 3000);
+    expect(powerOf(sunrise).stored).toBeGreaterThan(0);
+  });
+
+  it("restarts shed equipment straight away when sunlight alone can cover it", () => {
+    const shed = run(createStation(), truss, solar, lifeSupport, fit(3, 0, "lab-rack"), fit(3, 1, "lab-rack"), fit(3, 2, "lab-rack"));
+    // 0.5 kW systems + 3 kW of racks fits in 5.4 kW: nothing is shed.
+    expect(powerOf(shed).supplied).toBe(true);
+
+    const short = advance(run(shed, lab, ...labRacks), 5);
+    expect(labsRunning(short)).toBe(false);
+
+    const enough = run(short, { type: "unfit", moduleId: 4, mount: { kind: "slot", index: 0 } },
+      { type: "unfit", moduleId: 4, mount: { kind: "slot", index: 1 } },
+      { type: "unfit", moduleId: 4, mount: { kind: "slot", index: 2 } });
+    // 0.9 kW systems + 4 kW of racks fits again.
+    expect(powerOf(enough).supplied).toBe(true);
   });
 });

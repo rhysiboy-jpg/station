@@ -17,6 +17,8 @@ export const palette = {
   selected: 0xffd166,
   power: 0xffd166,
   unpowered: 0xff6b6b,
+  /** Some of a module's equipment has been shed. */
+  shedding: 0xff9f43,
 };
 
 export const equipmentColour: Record<EquipmentTypeId, number> = {

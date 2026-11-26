@@ -39,7 +39,11 @@ Modules joined by ports form one shared **network** per resource. Each **connect
 | Water | Water recycler, resupply | Crew, oxygen generation | Recycling below 100% |
 | Data | Lab racks | Sent to Earth by antennas | Stored on board until downlinked; in the full game, ground contact is only part of each orbit |
 
-Only **pressurised** modules join the air network. Later resources, in rough order: fuel (reboosts in low orbit), food, spare parts, radiation.
+Only **pressurised** modules join the air network.
+
+### Power shortages
+
+When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them. Later resources, in rough order: fuel (reboosts in low orbit), food, spare parts, radiation.
 
 ### Reference figures (starting points, to be tuned)
 
