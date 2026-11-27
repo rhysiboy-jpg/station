@@ -43,11 +43,11 @@ Only **pressurised** modules join the air network. Unlike the other resources, a
 
 ### Data
 
-Lab racks make data only while powered and tended: each crew member tends two racks, so a full four-rack lab needs two crew. Data storage holds it and antennas send it to Earth, both needing power. Whatever has nowhere to go is lost and counted. Data has no limit at joints, like water. Ground contact is constant in the prototype; contact windows for part of each orbit come with the full game.
+Lab racks make data only while powered and tended: each crew member tends two racks, so a full four-rack lab needs two crew. Data storage holds it and antennas send it to Earth, both needing power. Whatever has nowhere to go is lost and counted. Data has no limit at connections, like water. Ground contact is constant in the prototype; contact windows for part of each orbit come with the full game.
 
 ### Bottlenecks
 
-Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every joint filled by how much of it is in use, with bottlenecks in red. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
+Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every connection filled by how much of it is in use, with bottlenecks in red. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
 
 ### Power shortages
 

@@ -1,6 +1,6 @@
 // Data: lab racks make it while powered and tended by crew, data storage holds
 // it, and antennas send it to Earth. Every module carries data, with no limit
-// at joints (like water: real links carry far more than a few racks make).
+// at connections (like water: real data lines carry far more than a few racks make).
 // Ground contact is constant in the prototype; contact windows come later.
 import { EQUIPMENT_TYPES, RACKS_PER_CREW, type EquipmentType } from "./content";
 import { networksOf } from "./networks";

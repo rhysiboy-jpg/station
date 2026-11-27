@@ -47,11 +47,11 @@ export function networksOf(station: Station, resource: Resource): Network[] {
   return networks;
 }
 
-/** Resources that move through joints with a capacity. Water is pooled without limit (ADR 0003). */
-export type JointResource = "power" | "heat" | "air";
+/** Resources that move through connections with a capacity. Water is pooled without limit (ADR 0003). */
+export type LimitedResource = "power" | "heat" | "air";
 
-/** One joint inside a network, with what it can carry. */
-export interface Joint {
+/** One connection inside a network, with what it can carry. */
+export interface ConnectionLimit {
   a: ModuleId;
   b: ModuleId;
   /** kW for power and heat; m³/s of fan exchange for air. */
@@ -60,8 +60,8 @@ export interface Joint {
   port: PlacedPort;
 }
 
-/** The joints between a network's modules, in station order. Each joint is one connection. */
-export function jointsOf(station: Station, network: Network, resource: JointResource): Joint[] {
+/** The connections between a network's modules, in station order. Each connection is one connection. */
+export function connectionLimitsOf(station: Station, network: Network, resource: LimitedResource): ConnectionLimit[] {
   const members = new Set(network.moduleIds);
   const byId = new Map(station.modules.map((m) => [m.id, m]));
   return connectionsOf(station).flatMap(({ a, b }) => {

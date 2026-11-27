@@ -2,7 +2,7 @@
 // In a shortage, equipment is shed by priority (ADR 0004).
 import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
 import { FlowGraph, type ArcHandle } from "./flow";
-import { jointsOf, networksOf, type Joint, type Network } from "./networks";
+import { connectionLimitsOf, networksOf, type ConnectionLimit, type Network } from "./networks";
 import { isOffline, type ModuleId, type PlacedModule, type Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
@@ -24,7 +24,7 @@ export type ShedReason =
   | { kind: "battery-floor"; floor: number }
   /** There is enough now, but a shed tier only restarts on a full battery or sunlight alone. */
   | { kind: "waiting-for-full-battery" }
-  /** The station has the power, but a joint on the way here is full. */
+  /** The station has the power, but a connection on the way here is full. */
   | { kind: "bottleneck" };
 
 /** Shed tiers and why each is off. Running tiers are absent. */
@@ -80,8 +80,8 @@ export interface PowerReport {
   supplied: boolean;
   networks: NetworkPower[];
   modules: Record<ModuleId, ModulePower>;
-  /** Every joint on a power network, with its flow and whether it is a bottleneck. */
-  joints: JointFlow[];
+  /** Every connection on a power network, with its flow and whether it is a bottleneck. */
+  connections: ConnectionFlow[];
 }
 
 export function batteryKey(moduleId: ModuleId, slot: number): string {
@@ -131,11 +131,11 @@ function solarOf(station: Station, module: PlacedModule, sunlit: boolean): numbe
 const demandUpTo = (loads: Load[], upTo: RunningUpTo) =>
   loads.reduce((sum, l) => (l.priority <= upTo ? sum + l.kw : sum), 0);
 
-/** One joint's flow this tick (power or heat). */
-export interface JointFlow extends Joint {
+/** One connection's flow this tick (power or heat). */
+export interface ConnectionFlow extends ConnectionLimit {
   /** kW from a to b (negative: b to a). */
   flow: number;
-  /** It limits what reaches the modules beyond it: a bigger joint would let more run. */
+  /** It limits what reaches the modules beyond it: a bigger connection would let more run. */
   bottleneck: boolean;
 }
 
@@ -164,7 +164,7 @@ interface Resolved {
   draw: number;
   stored: number;
   capacity: number;
-  joints: JointFlow[];
+  connections: ConnectionFlow[];
 }
 
 const SOURCE = 0;
@@ -172,7 +172,7 @@ const SINK = 1;
 
 /**
  * Decides what runs on one network for the coming tick, routing power through
- * its joints (connection bottlenecks).
+ * its connections (connection bottlenecks).
  *
  * Tiers are served in priority order, each on top of the last, so a lower tier
  * never takes power a higher one needs. A module runs a tier only if all of
@@ -195,9 +195,9 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   });
   const fallback = Math.min(LOWEST_PRIORITY, ...recorded);
 
-  const joints = jointsOf(station, network, "power").map((joint) => ({
-    joint,
-    link: graph.addLink(nodeOf.get(joint.a) as number, nodeOf.get(joint.b) as number, joint.capacity),
+  const connections = connectionLimitsOf(station, network, "power").map((connection) => ({
+    connection,
+    twoWay: graph.addTwoWay(nodeOf.get(connection.a) as number, nodeOf.get(connection.b) as number, connection.capacity),
   }));
   const plans: ModulePlan[] = modules.map((module) => {
     const packs = packsOf(station, module);
@@ -290,7 +290,7 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   for (const p of plans) p.netCharge = (p.charge ? graph.flow(p.charge) : 0) - graph.flow(p.battery);
 
   // Bottlenecks: try to serve everything still shed, with batteries down to empty;
-  // joints on the cut between what power can reach and what it can't are the limit.
+  // connections on the cut between what power can reach and what it can't are the limit.
   let reach: Set<number> | undefined;
   if (findBottlenecks) {
     const trial = graph.clone();
@@ -334,12 +334,12 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
     draw: plans.reduce((sum, p) => sum + demandUpTo(p.loads, p.runningUpTo), 0),
     stored,
     capacity,
-    joints: joints.map(({ joint, link }) => {
-      const nodeA = nodeOf.get(joint.a) as number;
-      const nodeB = nodeOf.get(joint.b) as number;
-      const flow = graph.flow(link);
+    connections: connections.map(({ connection, twoWay }) => {
+      const nodeA = nodeOf.get(connection.a) as number;
+      const nodeB = nodeOf.get(connection.b) as number;
+      const flow = graph.flow(twoWay);
       const cut = reach !== undefined && reach.has(nodeA) !== reach.has(nodeB);
-      return { ...joint, flow, bottleneck: reachesModules && cut };
+      return { ...connection, flow, bottleneck: reachesModules && cut };
     }),
   };
 }
@@ -365,23 +365,23 @@ function modulePower(station: Station, module: PlacedModule, sunlit: boolean, pl
   };
 }
 
-/** Current power figures for the station, each network, module and joint: what runs this coming tick. */
+/** Current power figures for the station, each network, module and connection: what runs this coming tick. */
 export function powerOf(station: Station): PowerReport {
   return powerReport(station, true);
 }
 
 /**
- * The power report, optionally without working out which joints are
+ * The power report, optionally without working out which connections are
  * bottlenecks (only the view needs that; the tick doesn't).
  */
 export function powerReport(station: Station, findBottlenecks: boolean): PowerReport {
   const sunlit = orbitOf(station).phase === "day";
   const modules: Record<ModuleId, ModulePower> = {};
-  const joints: JointFlow[] = [];
+  const connections: ConnectionFlow[] = [];
   const networks = networksOf(station, "power").map((network): NetworkPower => {
     const r = resolve(station, network, sunlit, findBottlenecks);
     for (const p of r.plans) modules[p.module.id] = modulePower(station, p.module, sunlit, p);
-    joints.push(...r.joints);
+    connections.push(...r.connections);
     const runningUpTo = Math.min(...r.plans.map((p) => p.runningUpTo));
     return {
       moduleIds: network.moduleIds,
@@ -410,7 +410,7 @@ export function powerReport(station: Station, findBottlenecks: boolean): PowerRe
     supplied: networks.every((n) => n.supplied),
     networks,
     modules,
-    joints,
+    connections,
   };
 }
 

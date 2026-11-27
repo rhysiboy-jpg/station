@@ -1,4 +1,4 @@
-// A small max-flow solver for routing resources through joints (connection
+// A small max-flow solver for routing resources through connections (connection
 // bottlenecks). Station graphs are tiny, so plain Edmonds-Karp is plenty; it
 // is deterministic because every search visits arcs in the order they were added.
 
@@ -24,8 +24,8 @@ export class FlowGraph {
     return this.add(from, to, capacity, 0);
   }
 
-  /** A two-way link that carries at most `capacity` in either direction (net). */
-  addLink(a: number, b: number, capacity: number): ArcHandle {
+  /** A two-way pair of arcs that carries at most `capacity` in either direction (net). */
+  addTwoWay(a: number, b: number, capacity: number): ArcHandle {
     return this.add(a, b, capacity, capacity);
   }
 
@@ -37,7 +37,7 @@ export class FlowGraph {
     return { node: from, index: fromArcs.length - 1 };
   }
 
-  /** Net flow along an arc or link, in its added direction (negative: the other way). */
+  /** Net flow along an arc or two-way pair, in its added direction (negative: the other way). */
   flow(handle: ArcHandle): number {
     return this.arc(handle).flow;
   }

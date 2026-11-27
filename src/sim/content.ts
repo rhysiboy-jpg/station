@@ -27,7 +27,7 @@ export interface ModuleType {
   /** Power the module's own systems draw (lights, fans, avionics), in kW. */
   draw: number;
   /**
-   * What each of its ports can carry. A joint carries the lower of its two
+   * What each of its ports can carry. A connection carries the lower of its two
    * modules' ratings. Power and heat in kW; air is the fan exchange in m³/s.
    */
   capacity: { power: number; heat: number; air: number };
@@ -316,7 +316,7 @@ export const NOMINAL_TEMPERATURE = 21;
 /** Temperature limits, in °C. Used by warnings (#10). */
 export const TEMPERATURE_LIMITS = { yellow: 27, red: 32 };
 
-/** Heat leaking through each joint between attached modules, in kW per °C of difference. */
+/** Heat leaking through each connection between attached modules, in kW per °C of difference. */
 export const HEAT_LEAK_KW_PER_C = 0.05;
 
 /** How quickly a loop with spare capacity pulls a warm module back to the set point, in seconds. */

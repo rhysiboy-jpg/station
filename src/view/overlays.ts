@@ -9,7 +9,7 @@ import {
   NOMINAL_TEMPERATURE,
   powerOf,
   TEMPERATURE_LIMITS,
-  type JointFlow,
+  type ConnectionFlow,
   type ModuleId,
   type PlacedPort,
   type Station,
@@ -32,8 +32,8 @@ export interface ModuleOverlay {
   figureColour?: number;
 }
 
-/** A joint drawn with how full it is. */
-export interface JointOverlay {
+/** A connection drawn with how full it is. */
+export interface ConnectionOverlay {
   port: PlacedPort;
   /** Share of its capacity in use, 0 to 1. */
   load: number;
@@ -43,12 +43,12 @@ export interface JointOverlay {
 export interface Overlay {
   /** Per module; modules not on this overlay's network are absent and drawn dimmed. */
   modules: Record<ModuleId, ModuleOverlay>;
-  /** Joints, for overlays whose resource moves through them with a capacity. */
-  joints: JointOverlay[];
+  /** Connections, for overlays whose resource moves through them with a capacity. */
+  connections: ConnectionOverlay[];
 }
 
-const jointsFrom = (joints: JointFlow[]): JointOverlay[] =>
-  joints.map((j) => ({
+const connectionsFrom = (connections: ConnectionFlow[]): ConnectionOverlay[] =>
+  connections.map((j) => ({
     port: j.port,
     load: j.capacity > 0 ? Math.min(1, Math.abs(j.flow) / j.capacity) : 0,
     bottleneck: j.bottleneck,
@@ -59,11 +59,11 @@ const levelTint = (level: Level, ok: number) => (level === "red" ? palette.dange
 
 export function overlayFor(kind: OverlayKind, station: Station): Overlay {
   const overlay: Record<ModuleId, ModuleOverlay> = {};
-  let joints: JointOverlay[] = [];
+  let connections: ConnectionOverlay[] = [];
   switch (kind) {
     case "power": {
       const power = powerOf(station);
-      joints = jointsFrom(power.joints);
+      connections = connectionsFrom(power.connections);
       for (const [id, p] of Object.entries(power.modules)) {
         const net = p.production - p.draw;
         overlay[Number(id)] = {
@@ -76,7 +76,7 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
     }
     case "heat": {
       const heat = heatOf(station);
-      joints = jointsFrom(heat.joints);
+      connections = connectionsFrom(heat.connections);
       for (const [id, h] of Object.entries(heat.modules)) {
         const level: Level =
           h.temperature >= TEMPERATURE_LIMITS.red ? "red" : h.temperature >= TEMPERATURE_LIMITS.yellow ? "yellow" : "ok";
@@ -143,5 +143,5 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
       break;
     }
   }
-  return { modules: overlay, joints };
+  return { modules: overlay, connections };
 }

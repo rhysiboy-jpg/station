@@ -10,7 +10,7 @@ import {
   type Command,
   type CommandResult,
   type EquipmentTypeId,
-  type JointFlow,
+  type ConnectionFlow,
   type Station,
 } from "./index";
 
@@ -32,8 +32,8 @@ const hardpoint = (moduleId: number, index: number, equipment: EquipmentTypeId):
   mount: { kind: "hardpoint", index },
   equipment,
 });
-const joint = (joints: JointFlow[], a: number, b: number) =>
-  joints.find((j) => (j.a === a && j.b === b) || (j.a === b && j.b === a));
+const connection = (connections: ConnectionFlow[], a: number, b: number) =>
+  connections.find((j) => (j.a === a && j.b === b) || (j.a === b && j.b === a));
 
 /**
  * Core node (1), a corridor (2) east of it, and truss (3) beyond with two solar
@@ -52,21 +52,21 @@ const racks = [0, 1, 2, 3].map((i) => slot(4, i, "lab-rack"));
 const behindCorridor = () =>
   run(createStation(), corridor, truss, ...panels, lab, ...racks, habitat, lifeSupport, slot(6, 0, "oxygen-generator"));
 
-describe("joint capacity", () => {
+describe("connection capacity", () => {
   it("is the lower of the two modules' port ratings, per resource", () => {
     const power = powerOf(behindCorridor());
     const heat = heatOf(behindCorridor());
 
-    expect(joint(power.joints, 1, 2)?.capacity).toBe(Math.min(MODULE_TYPES["core-node"].capacity.power, MODULE_TYPES.corridor.capacity.power));
-    expect(joint(power.joints, 1, 2)?.capacity).toBe(6);
-    expect(joint(heat.joints, 1, 2)?.capacity).toBe(4);
-    expect(joint(power.joints, 2, 3)?.capacity).toBe(6);
+    expect(connection(power.connections, 1, 2)?.capacity).toBe(Math.min(MODULE_TYPES["core-node"].capacity.power, MODULE_TYPES.corridor.capacity.power));
+    expect(connection(power.connections, 1, 2)?.capacity).toBe(6);
+    expect(connection(heat.connections, 1, 2)?.capacity).toBe(4);
+    expect(connection(power.connections, 2, 3)?.capacity).toBe(6);
   });
 });
 
 describe("power through a bottleneck", () => {
-  it("never carries more than a joint's capacity", () => {
-    for (const j of powerOf(behindCorridor()).joints) expect(Math.abs(j.flow)).toBeLessThanOrEqual(j.capacity + 1e-9);
+  it("never carries more than a connection's capacity", () => {
+    for (const j of powerOf(behindCorridor()).connections) expect(Math.abs(j.flow)).toBeLessThanOrEqual(j.capacity + 1e-9);
   });
 
   it("leaves the far side short even when the network has power to spare", () => {
@@ -79,16 +79,16 @@ describe("power through a bottleneck", () => {
     expect(power.modules[4]?.shed[4]).toEqual({ kind: "bottleneck" });
   });
 
-  it("marks the joint that limits it", () => {
-    // Both corridor joints are rated 6 kW, but the truss end also carries the
+  it("marks the connection that limits it", () => {
+    // Both corridor connections are rated 6 kW, but the truss end also carries the
     // corridor's own 0.05 kW, so that is the one that fills first.
-    const joints = powerOf(behindCorridor()).joints;
+    const connections = powerOf(behindCorridor()).connections;
 
-    expect(joint(joints, 2, 3)?.bottleneck).toBe(true);
-    expect(joints.filter((j) => j.bottleneck)).toHaveLength(1);
+    expect(connection(connections, 2, 3)?.bottleneck).toBe(true);
+    expect(connections.filter((j) => j.bottleneck)).toHaveLength(1);
   });
 
-  it("goes away with a wide enough joint: the same station with the truss straight on the core", () => {
+  it("goes away with a wide enough connection: the same station with the truss straight on the core", () => {
     const direct = run(
       createStation(),
       { type: "place", module: "truss", position: { x: 1, y: 0 }, rotation: 90 },
@@ -99,14 +99,14 @@ describe("power through a bottleneck", () => {
     );
 
     expect(powerOf(direct).supplied).toBe(true);
-    expect(powerOf(direct).joints.some((j) => j.bottleneck)).toBe(false);
+    expect(powerOf(direct).connections.some((j) => j.bottleneck)).toBe(false);
   });
 
   it("only charges batteries it can reach", () => {
     // A battery in the core, behind the corridor: it charges with whatever the corridor has left.
     const station = run(behindCorridor(), slot(1, 0, "battery"));
     const later = advance(station, 10);
-    const through = joint(powerOf(later).joints, 1, 2);
+    const through = connection(powerOf(later).connections, 1, 2);
 
     expect(powerOf(later).stored).toBeGreaterThan(0);
     expect(Math.abs(through?.flow ?? 0)).toBeLessThanOrEqual(6 + 1e-9);
@@ -119,21 +119,21 @@ describe("heat through a bottleneck", () => {
   /** Lab racks running, nothing else on the core side: 4.6 kW of heat. */
   const hotLab = () => run(createStation(), corridor, truss, ...panels, lab, ...racks);
 
-  it("warms the modules behind a narrow joint even with radiators to spare", () => {
+  it("warms the modules behind a narrow connection even with radiators to spare", () => {
     const station = cooled(hotLab());
     const heat = heatOf(station);
 
     expect(heat.networks[0]?.capacity).toBeCloseTo(6);
     // The truss end of the corridor carries the corridor's own heat too, so it fills first.
-    expect(joint(heat.joints, 2, 3)?.bottleneck).toBe(true);
-    expect(heat.joints.filter((j) => j.bottleneck)).toHaveLength(1);
+    expect(connection(heat.connections, 2, 3)?.bottleneck).toBe(true);
+    expect(heat.connections.filter((j) => j.bottleneck)).toHaveLength(1);
     expect(heatOf(advance(station, 360)).modules[4]?.temperature).toBeGreaterThan(NOMINAL_TEMPERATURE + 0.5);
   });
 
-  it("shares a narrow joint between the modules behind it, and fully cools the near side", () => {
+  it("shares a narrow connection between the modules behind it, and fully cools the near side", () => {
     const station = advance(cooled(hotLab()), 360);
     const heat = heatOf(station);
-    const through = joint(heat.joints, 2, 3);
+    const through = connection(heat.connections, 2, 3);
 
     // Fully cooled, bar a little heat leaking in from the warm corridor next door.
     expect(heat.modules[3]?.temperature).toBeLessThan(NOMINAL_TEMPERATURE + 0.5);

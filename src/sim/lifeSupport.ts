@@ -153,8 +153,8 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
     }
   }
 
-  // Fans swap a little air across each joint between pressurised modules,
-  // all computed from the same snapshot so the order of joints doesn't matter.
+  // Fans swap a little air across each connection between pressurised modules,
+  // all computed from the same snapshot so the order of connections doesn't matter.
   const cut = offlineCutsNetworks(station);
   const deltas = new Map<ModuleId, Air>(pressurised.map((m) => [m.id, { o2: 0, co2: 0 }]));
   const volumes = new Map(pressurised.map((m) => [m.id, volumeOf(m)]));
@@ -163,7 +163,7 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
     const airB = air[b.moduleId];
     if (!airA || !airB) continue;
     if (cut && (isOffline(station, a.moduleId) || isOffline(station, b.moduleId))) continue;
-    // Fans move the slower of the two modules' rates (the joint's air capacity).
+    // Fans move the slower of the two modules' rates (the connection's air capacity).
     const ma = station.modules.find((m) => m.id === a.moduleId) as PlacedModule;
     const mb = station.modules.find((m) => m.id === b.moduleId) as PlacedModule;
     const exchanged = Math.min(MODULE_TYPES[ma.type].capacity.air, MODULE_TYPES[mb.type].capacity.air) * SECONDS_PER_TICK;

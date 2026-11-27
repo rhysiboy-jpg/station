@@ -295,14 +295,14 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     }
     html.push(`</dl>`);
   }
-  // Joints: what each connection to a neighbour carries, against its capacity.
-  const powerJoints = powerOf(station).joints.filter((j) => j.a === module.id || j.b === module.id);
-  if (powerJoints.length > 0) {
-    html.push(`<h3>Joints</h3><dl class="totals">`);
-    for (const pj of powerJoints) {
+  // Connections: what each connection to a neighbour carries, against its capacity.
+  const powerConnections = powerOf(station).connections.filter((j) => j.a === module.id || j.b === module.id);
+  if (powerConnections.length > 0) {
+    html.push(`<h3>Connections</h3><dl class="totals">`);
+    for (const pj of powerConnections) {
       const other = pj.a === module.id ? pj.b : pj.a;
       const otherModule = station.modules.find((m) => m.id === other);
-      const hj = heatReport.joints.find((h) => (h.a === pj.a && h.b === pj.b) || (h.a === pj.b && h.b === pj.a));
+      const hj = heatReport.connections.find((h) => (h.a === pj.a && h.b === pj.b) || (h.a === pj.b && h.b === pj.a));
       const part = (flow: number, capacity: number, bottleneck: boolean, unit: string) =>
         `<span class="${bottleneck ? "bad" : Math.abs(flow) >= capacity * 0.75 ? "warn" : ""}">${Math.abs(flow).toFixed(1)}/${capacity} ${unit}</span>`;
       html.push(
@@ -416,7 +416,7 @@ function shedText(reason: ShedReason | undefined): string {
     case "waiting-for-full-battery":
       return "waiting for full battery";
     case "bottleneck":
-      return "a joint on the way is full";
+      return "a connection on the way is full";
     default:
       return "no power";
   }

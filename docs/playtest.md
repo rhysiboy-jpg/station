@@ -40,7 +40,7 @@ Start each challenge from the **Challenge** panel. Play at 1x until the station 
 While playing each one, watch for:
 
 - [ ] **Night shift:** did the battery floors (labs stop at 50%) come across as a rule you could plan around, or as a surprise? Did the battery bar's floor marks and the "Off: battery below 50%" reason get noticed?
-- [ ] **Cool running:** did heat build-up feel like a problem you could see coming? Was it a puzzle (where to put radiators, which joints carry heat) or just "add radiators"?
+- [ ] **Cool running:** did heat build-up feel like a problem you could see coming? Was it a puzzle (where to put radiators, which connections carry heat) or just "add radiators"?
 - [ ] **Science return:** did crew tending (2 racks per crew member) and antenna rate shape the layout, or was data an afterthought?
 - [ ] **Long haul:** did water ever run short? With 5 and 10 kg tanks, did recycling matter? _(balance, open question 4)_
 - [ ] **Station keeping:** was it winnable? How long did the build take, and was the build itself the fun part or a chore?
@@ -53,7 +53,7 @@ Start a **New station** in free play and build something ambitious: 6 or more cr
 
 - [ ] **Packing against surface.** Did tight packing ever cost a hardpoint (shown **Blocked**) that you wanted? Did you change a layout because of it?
 - [ ] **Truss.** Did hanging panels and radiators on truss away from living space feel like a real choice?
-- [ ] **Bottlenecks.** Did a narrow joint (a corridor, 6 kW of power and 4 kW of heat) ever limit you? Did the red joint in the power or heat overlay show you where, and did you understand the fix?
+- [ ] **Bottlenecks.** Did a narrow connection (a corridor, 6 kW of power and 4 kW of heat) ever limit you? Did the red connection in the power or heat overlay show you where, and did you understand the fix?
 - [ ] **Heat leakage.** Did a hot module next to a habitat ever matter?
 - [ ] **Air per module.** Did crew far from the scrubber get worse air than those near it? Did that change where you put people?
 - [ ] **Load shedding.** When power ran short, did the right things stop (science first, life support last)? Did the "why it's off" reasons make sense? Did whole tiers stopping per module ever feel wrong, for example all four lab racks off when two would fit? _(open question 5)_
@@ -85,7 +85,7 @@ Notes:
 - [ ] Heat: about 1 °C per orbit for each kW of unshed heat. Too fast, too slow, or right? _(open question 4)_
 - [ ] Challenges: a hold can slip for a quarter orbit (about 30 s at 1x) before failing, and a result pauses the game. Too strict or too loose? _(open question 2)_
 - [ ] Starting a challenge on your current station, with building allowed during it: did that feel like cheating, or fine? Would you rather start fresh? _(open question 1)_
-- [ ] Joint capacities and data rates: anything that felt arbitrary or never mattered? _(open question 4)_
+- [ ] Connection capacities and data rates: anything that felt arbitrary or never mattered? _(open question 4)_
 
 Notes:
 
