@@ -31,6 +31,6 @@ npm run e2e        # browser smoke tests with Playwright (builds first)
 - `src/view/`: the PixiJS 2D view. It reads simulation state and draws it.
 - `src/ui/`: HTML panels (status, alerts, inspector, challenge) and browser saves (autosave, export, import).
 - `e2e/`: browser smoke tests (Playwright), run in CI after the unit tests.
-- `src/main.ts`: wires the two together.
+- `src/main.ts`: owns the current station and what the player is doing (tool, selection, camera, speed, overlay), draws each frame and runs the fixed-tick loop. Panels, banners, keyboard shortcuts and saves live in `src/ui/`.
 
 Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`. CI runs on every pull request.
