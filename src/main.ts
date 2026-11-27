@@ -161,6 +161,11 @@ function hoveredHardpoint(): { module: PlacedModule; hardpoint: HardpointState }
 }
 
 function setTool(next: Tool): void {
+  // Building is locked while a challenge runs, whether by button or shortcut.
+  if (next && station.challenge?.outcome === "running") {
+    say("Building is locked while a challenge runs. You can still move crew, or give up the challenge to build.", true);
+    return;
+  }
   tool = next;
   for (const button of modulesEl.querySelectorAll<HTMLButtonElement>("button")) {
     button.setAttribute("aria-pressed", String(tool?.kind === "place" && tool.module === button.dataset.id));

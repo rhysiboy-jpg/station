@@ -106,7 +106,8 @@ There are five resources. Each moves through its own **Network** of connected mo
 
 - A length in orbits, at least one **Hold** or **Goal**, and a one-line brief ending with a full stop (100 characters at most).
 - Each challenge leans mainly on one system, so the set covers power, heat, life support and data.
-- Prove a new challenge winnable with a test that builds a station and wins it, as `challenge.test.ts` does for Night shift.
+- Prove a new challenge winnable: add a test to `src/sim/winnable.test.ts` that builds a station and wins it. Where the challenge is meant to need something (Night shift needs batteries), add a test that it's lost without it.
+- Keep the hold grace (`CHALLENGE_LAPSE_TICKS`) shorter than eclipse, or holds can lapse all night.
 
 ## Checklists
 

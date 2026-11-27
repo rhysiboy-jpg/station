@@ -432,5 +432,10 @@ export const CHALLENGES = [
 
 export type ChallengeId = (typeof CHALLENGES)[number]["id"];
 
-/** A hold may lapse this long before the challenge fails: half an orbit, about 60 s at 1x. */
-export const CHALLENGE_LAPSE_TICKS = 600;
+/**
+ * A hold may lapse this long before the challenge fails: a quarter orbit,
+ * about 30 s at 1x, the same grace a red module gets. It must stay shorter
+ * than eclipse (480 ticks), or a hold could lapse all night and challenges
+ * like Night shift would no longer need batteries.
+ */
+export const CHALLENGE_LAPSE_TICKS = OFFLINE_AFTER_TICKS;

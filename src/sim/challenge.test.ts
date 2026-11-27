@@ -70,7 +70,7 @@ describe("a challenge", () => {
     expect(challengeOf(back)?.outcome).toBe("won");
   });
 
-  it("fails when a hold lapses for more than half an orbit, and says which", () => {
+  it("fails when a hold lapses for more than a quarter orbit, and says which", () => {
     const station = advance(run(twoCrew(), start("shakedown"), crew(2, 0)), CHALLENGE_LAPSE_TICKS + 1);
     const progress = challengeOf(station);
 
@@ -125,8 +125,10 @@ describe("a challenge", () => {
 describe("while a challenge runs", () => {
   const habitat2: Command = { type: "place", module: "habitat", position: { x: -1, y: -3 }, rotation: 180 };
 
-  it("gives holds half an orbit of grace", () => {
-    expect(CHALLENGE_LAPSE_TICKS).toBe(TICKS_PER_ORBIT / 2);
+  it("gives holds a quarter orbit of grace, shorter than eclipse", () => {
+    expect(CHALLENGE_LAPSE_TICKS).toBe(TICKS_PER_ORBIT / 4);
+    // A hold must not be able to lapse for the whole eclipse (40% of an orbit).
+    expect(CHALLENGE_LAPSE_TICKS).toBeLessThan(TICKS_PER_ORBIT * 0.4);
   });
 
   it("locks building: no placing, removing, fitting, unfitting, undo or difficulty changes", () => {
