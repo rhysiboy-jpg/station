@@ -58,7 +58,10 @@ export function renderStatus(station: Station): void {
     balance.textContent = !power.powered ? "No power" : !power.supplied ? `Shedding · ${net}` : net;
     balance.className = !power.powered ? "bad" : !power.supplied || power.balance < 0 ? "warn" : "good";
   }
-  text("power-flow", `${kw(power.production)} / ${kw(power.draw)}${power.draw < power.demand ? ` of ${kw(power.demand)}` : ""}`);
+  text(
+    "power-flow",
+    `${power.production.toFixed(1)} / ${power.draw.toFixed(1)}${power.draw < power.demand ? ` of ${power.demand.toFixed(1)}` : ""} kW`,
+  );
   const charge = power.capacity > 0 ? power.stored / power.capacity : 0;
   text(
     "power-stored",
@@ -89,7 +92,7 @@ export function renderStatus(station: Station): void {
     const o2 = Math.min(...airs.map((a) => a.o2));
     const co2 = Math.max(...airs.map((a) => a.co2));
     const level = Math.max(levelOf(AIR_LIMITS.o2, o2, true), levelOf(AIR_LIMITS.co2, co2, false)) as 0 | 1 | 2;
-    status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)} kPa`, LEVEL_CLASS[level]);
+    status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)}`, LEVEL_CLASS[level]);
   }
   const water = life.water;
   const waterLevel: 0 | 1 | 2 = water.capacity === 0 ? 0 : water.stored === 0 ? 2 : water.stored < water.capacity * 0.25 ? 1 : 0;
@@ -104,12 +107,12 @@ export function renderStatus(station: Station): void {
   status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, hottest, false)]);
   const load = heat.networks.reduce((sum, n) => sum + n.load, 0);
   const capacity = heat.networks.reduce((sum, n) => sum + n.capacity, 0);
-  status("heat-loop", `${kw(load)} made / ${kw(capacity)} rejected`, load > capacity ? "warn" : "good");
+  status("heat-loop", `${load.toFixed(1)} / ${capacity.toFixed(1)} kW`, load > capacity ? "warn" : "good");
 
   const data = dataOf(station);
   status(
     "data-flow",
-    `${data.produced.toFixed(1)} made · ${Math.min(data.downlink, data.produced + data.stored).toFixed(1)} sent GB/h`,
+    `${data.produced.toFixed(1)} / ${Math.min(data.downlink, data.produced + data.stored).toFixed(1)} GB/h`,
     data.produced === 0 && data.downlink === 0 ? "muted" : data.produced > data.downlink ? "warn" : "good",
   );
   const filling = data.capacity > 0 && data.stored >= data.capacity * 0.95;
@@ -237,7 +240,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     html.push(`</dl>`);
   }
   if (power) {
-    html.push(`<h3>Power</h3><dl class="totals">`);
+    html.push(`<h3 class="net power">Power</h3><dl class="totals">`);
     const status = power.offline
       ? `<dd class="bad">Offline</dd>`
       : !power.powered
@@ -256,7 +259,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   const air = life.modules[module.id];
   if (air) {
     const room = life.beds - life.crew;
-    html.push(`<h3>Crew and air</h3><dl class="totals">`);
+    html.push(`<h3 class="net air">Crew and air</h3><dl class="totals">`);
     html.push(
       `<dt>Crew</dt><dd><span class="crew-control">` +
         `<button type="button" data-crew="-1" ${module.crew === 0 ? "disabled" : ""} aria-label="One fewer crew">−</button>` +
@@ -279,7 +282,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   const heatReport = heatOf(station);
   const heat = heatReport.modules[module.id];
   if (heat) {
-    html.push(`<h3>Heat</h3><dl class="totals">`);
+    html.push(`<h3 class="net heat">Heat</h3><dl class="totals">`);
     html.push(
       `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, heat.temperature, false)]}">${heat.temperature.toFixed(1)} °C</dd>`,
     );
@@ -313,7 +316,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
 
   const data = dataOf(station).modules[module.id];
   if (data && (data.produced > 0 || data.racksUntended > 0 || data.capacity > 0 || data.downlink > 0)) {
-    html.push(`<h3>Data</h3><dl class="totals">`);
+    html.push(`<h3 class="net data">Data</h3><dl class="totals">`);
     if (data.racksWorking + data.racksUntended > 0) {
       html.push(`<dt>Racks</dt><dd class="${data.racksUntended > 0 ? "warn" : ""}">${data.racksWorking} of ${data.racksWorking + data.racksUntended} tended</dd>`);
       if (data.racksUntended > 0) {

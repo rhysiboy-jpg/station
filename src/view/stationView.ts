@@ -66,7 +66,6 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
   for (const module of station.modules) {
     let tint: number | undefined;
     if (options.removing === module.id) tint = palette.invalid;
-    else if (options.selected === module.id) tint = palette.selected;
     else if (options.overlay) tint = options.overlay.modules[module.id]?.tint;
 
     const body = drawModuleBody(module, tint, options.overlay !== undefined && tint !== undefined && tint !== palette.invalid);
@@ -76,6 +75,7 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
       layer.addChild(drawStatusRing(module, status.offline ? palette.offline : status.level === "red" ? palette.danger : palette.warning));
     }
     layer.addChild(body);
+    if (options.selected === module.id) layer.addChild(drawStatusRing(module, palette.selected, 7));
     for (const port of portsOf(module)) {
       layer.addChild(drawPort(port, joined.has(portKey(port)) ? palette.portJoined : palette.portFree));
     }
@@ -91,10 +91,9 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
   return layer;
 }
 
-/** A ring just outside a module: yellow or red for warnings, grey when offline. */
-function drawStatusRing(placement: Placement, colour: number): Graphics {
+/** A ring just outside a module: yellow or red for warnings, grey when offline, white (further out) when selected. */
+function drawStatusRing(placement: Placement, colour: number, pad = 3): Graphics {
   const { left, top, width, height } = bounds(placement);
-  const pad = 3;
   return new Graphics()
     .roundRect(left - pad, top - pad, width + pad * 2, height + pad * 2, 8)
     .stroke({ width: 2, color: colour, alpha: 0.9 });

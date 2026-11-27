@@ -42,9 +42,10 @@
       <h2>Challenge</h2>
       <div class="list challenge" id="challenge"></div>
       <p class="help">
-        Click to place. Equipment: internal goes in a module's slots; external goes on a free hardpoint, so
-        point at the empty cell beside one. Click a module with nothing selected to inspect it. Right-drag or
-        arrow keys to pan. Esc to stop building.
+        Click to place; R rotates. Equipment: internal goes in a module's slots; external goes on a free hardpoint,
+        so point at the empty cell beside one. Click a module with nothing selected to inspect it and set its crew.
+        Overlays: P power, H heat, O air, U water, T data. Space pauses. Right-drag or arrow keys to pan. Esc stops
+        building.
       </p>
     </aside>
 
@@ -62,23 +63,23 @@
           <div class="orbit-line muted"><span id="phase-countdown"></span></div>
         </div>
         <dl class="totals">
-          <dt>Power</dt><dd id="power-balance">–</dd>
-          <dt>Makes / uses</dt><dd id="power-flow">–</dd>
-          <dt>Batteries</dt><dd id="power-stored">–</dd>
+          <dt class="net power">Power</dt><dd id="power-balance">–</dd>
+          <dt class="net power">Makes / uses</dt><dd id="power-flow">–</dd>
+          <dt class="net power">Batteries</dt><dd id="power-stored">–</dd>
         </dl>
         <div class="battery-bar" id="battery-bar" hidden title="Battery floors: below each mark that priority tier is shed">
           <div class="fill"></div>
         </div>
         <dl class="totals">
-          <dt>Crew</dt><dd id="crew-total">–</dd>
-          <dt>Air (worst)</dt><dd id="air-worst">–</dd>
-          <dt>Water</dt><dd id="water-total">–</dd>
-          <dt>Hottest</dt><dd id="heat-worst">–</dd>
-          <dt>Cooling</dt><dd id="heat-loop">–</dd>
-          <dt>Data</dt><dd id="data-flow">–</dd>
-          <dt>Stored</dt><dd id="data-stored">–</dd>
-          <dt>Sent to Earth</dt><dd id="data-sent">–</dd>
-          <dt>Ground contact</dt><dd id="data-contact" title="Constant in the prototype; contact windows come later">–</dd>
+          <dt class="net air">Crew</dt><dd id="crew-total">–</dd>
+          <dt class="net air">Air (kPa)</dt><dd id="air-worst">–</dd>
+          <dt class="net water">Water</dt><dd id="water-total">–</dd>
+          <dt class="net heat">Hottest</dt><dd id="heat-worst">–</dd>
+          <dt class="net heat">Heat / cooling</dt><dd id="heat-loop">–</dd>
+          <dt class="net data">Data made / sent</dt><dd id="data-flow">–</dd>
+          <dt class="net data">Stored</dt><dd id="data-stored">–</dd>
+          <dt class="net data">Sent to Earth</dt><dd id="data-sent">–</dd>
+          <dt class="net data">Ground contact</dt><dd id="data-contact" title="Constant in the prototype; contact windows come later">–</dd>
         </dl>
         <div class="overlays" id="overlays" role="group" aria-label="Overlay"></div>
       </section>

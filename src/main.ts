@@ -265,6 +265,7 @@ function buildPalettes(): void {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.overlay = kind;
+    button.className = `net ${kind}`;
     button.setAttribute("aria-pressed", "false");
     button.innerHTML = `${name} <kbd>${key.toUpperCase()}</kbd>`;
     button.addEventListener("click", () => toggleOverlay(kind));

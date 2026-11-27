@@ -108,7 +108,7 @@ The first milestone is a sandbox that answers one question: is the layout puzzle
 - **Modules (6):** core node (ports on all four sides), habitat, life support module, lab, truss segment, corridor.
 - **Equipment (8):** solar panel, radiator, battery, oxygen generator / CO2 scrubber, water recycler, lab rack, antenna, data storage.
 - Day and night, heat, failures and warnings. Constant ground contact (contact windows come later).
-- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits".
+- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits". Built as six: Shakedown, Night shift, Cool running, Science return, Long haul and Station keeping. A challenge starts from the station as it stands. Its **holds** (crew aboard, lab racks working, every module below a temperature) must stay true for its length, with a quarter-orbit grace for lapses; its **goals** (data sent to Earth) must be met before time runs out. Abandoning the station fails it.
 - Screen: build palette, overlay toggles for each network, module inspector, time controls, alerts list, day/night and contact indicator.
 - Autosaves in the browser, with export and import of save files to share layouts. Saves are versioned JSON checked in full on load, so a broken or hand-edited file is refused with a message. Undo history isn't saved.
 - Published to GitHub Pages on each update.

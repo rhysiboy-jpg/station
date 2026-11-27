@@ -20,6 +20,7 @@ npm test           # run the tests once
 npm run test:watch # re-run tests on change
 npm run typecheck  # type-check the core (no browser APIs) and the app
 npm run build      # static build into dist/
+npm run e2e        # browser smoke tests with Playwright (builds first)
 ```
 
 ## Layout
@@ -27,7 +28,8 @@ npm run build      # static build into dist/
 - `src/sim/`: the simulation core. Plain TypeScript with no rendering or browser dependencies ([ADR 0001](docs/adr/0001-typescript-sim-core-separate-from-rendering.md)). Its public interface is `src/sim/index.ts`; the view imports only from there. This is enforced twice: `tsconfig.sim.json` type-checks the core without DOM types, and `src/sim/boundary.test.ts` fails if the core imports any package.
 - `src/sim/content.ts`: module types as data, so balancing is editing numbers.
 - `src/view/`: the PixiJS 2D view. It reads simulation state and draws it.
-- `src/ui/`: HTML panels (status, inspector).
+- `src/ui/`: HTML panels (status, alerts, inspector, challenge) and browser saves (autosave, export, import).
+- `e2e/`: browser smoke tests (Playwright), run in CI after the unit tests.
 - `src/main.ts`: wires the two together.
 
 Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`. CI runs on every pull request.

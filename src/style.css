@@ -5,9 +5,19 @@
   --ink: #cfe3ff;
   --muted: #6f8db3;
   --accent: #7fd4ff;
-  --good: #5fe3a1;
-  --power: #ffd166;
-  --bad: #ff6b6b;
+  /* One colour per network; keep in step with src/view/palette.ts. */
+  --power: #3fd2ff;
+  --heat: #ff9446;
+  --air: #4fe3a1;
+  --water: #5a7dff;
+  --data: #c58cff;
+  /* Warnings only. */
+  --warning: #ffe14d;
+  --danger: #ff4d5e;
+  --good: #8be08b;
+  --sun: #ffd98a;
+  /* Older names. */
+  --bad: var(--danger);
 }
 
 * { box-sizing: border-box; }
@@ -47,7 +57,7 @@ html, body {
   z-index: 1;
   top: 16px;
   right: 16px;
-  width: 270px;
+  width: 290px;
   max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
@@ -130,7 +140,7 @@ html, body {
   overflow: hidden;
 }
 
-.orbit-bar .day { position: absolute; inset: 0 40% 0 0; background: rgba(255, 209, 102, 0.35); }
+.orbit-bar .day { position: absolute; inset: 0 40% 0 0; background: rgba(255, 217, 138, 0.3); }
 .orbit-bar .marker { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--ink); }
 
 .battery-bar {
@@ -143,11 +153,11 @@ html, body {
   overflow: hidden;
 }
 .battery-bar[hidden] { display: none; }
-.battery-bar .fill { position: absolute; inset: 0 auto 0 0; background: rgba(255, 209, 102, 0.55); }
+.battery-bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--power); opacity: 0.55; }
 .battery-bar .floor { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink); opacity: 0.7; }
 
 #phase-label.eclipse { color: var(--accent); }
-#phase-label.day { color: var(--power); }
+#phase-label.day { color: var(--sun); }
 
 .totals {
   display: grid;
@@ -160,10 +170,28 @@ html, body {
 .totals dd { margin: 0; text-align: right; }
 
 .good { color: var(--good); }
-.warn { color: var(--power); }
+.warn { color: var(--warning); }
 .bad { color: var(--bad); }
 
 .overlays { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+
+/* Network marks: a small swatch before anything that belongs to one network. */
+.net::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--net);
+  vertical-align: 1px;
+}
+.net.power { --net: var(--power); }
+.net.heat { --net: var(--heat); }
+.net.air { --net: var(--air); }
+.net.water { --net: var(--water); }
+.net.data { --net: var(--data); }
+.overlays button[aria-pressed="true"].net { border-color: var(--net); }
 .overlays button { justify-content: center; gap: 4px; }
 .overlays button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
 
@@ -206,7 +234,7 @@ html, body {
   justify-content: space-between;
   gap: 6px;
   padding: 3px 6px;
-  border-left: 3px solid var(--power);
+  border-left: 3px solid var(--warning);
   text-align: left;
 }
 .alerts li.red button { border-left-color: var(--bad); }

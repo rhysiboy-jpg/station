@@ -110,6 +110,14 @@ The long mode that grows one **Station** from a seed **Module** in a chosen star
 A goal set in the **Sandbox**, such as "keep 6 crew alive and 2 labs running through 10 orbits".
 _Avoid_: Mission, objective, quest
 
+**Hold**:
+A condition a **Challenge** needs to stay true for its whole length, such as "4 crew aboard". A short lapse is forgiven.
+_Avoid_: Requirement, constraint
+
+**Goal**:
+Something a **Challenge** needs reached before its time runs out, such as "send 30 GB to Earth".
+_Avoid_: Objective, target
+
 **Contract**:
 A campaign job that asks for specific capabilities and pays money and tech unlocks.
 _Avoid_: Mission, order, job
