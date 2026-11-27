@@ -46,7 +46,7 @@ There are five resources. Each moves through its own **Network** of connected mo
 
 **R1. Connection limits.** A connection carries the lower of its two modules' port ratings for each limited resource. A resource gets no limit only if no plausible pipe or line could ever bind it; record that in ADR 0003.
 
-**R2. Shortage rule.** When power is short, equipment is shed by priority tier (see E3), never at random. Each tier may run batteries only down to its floor: tier 1 to empty, tier 2 to 15%, tier 3 to 30%, tier 4 to 50% ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)).
+**R2. Shortage rule.** When power is short, equipment is shed by priority tier (see E3), never at random, and item by item: within a tier a module runs as many pieces as fit, in slot-then-hardpoint order. Each tier may run batteries only down to its floor: tier 1 to empty, tier 2 to 15%, tier 3 to 30%, tier 4 to 50% ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)).
 
 **R3. Warnings.** Every resource that can hurt the station has yellow and red limits in data (`TEMPERATURE_LIMITS`, `AIR_LIMITS`, `WATER_LOW_FRACTION`). Red for a quarter orbit takes a module offline. Power warns but never takes a module offline by itself.
 

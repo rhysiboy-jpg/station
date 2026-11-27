@@ -12,3 +12,7 @@ Two further rules make the tiers hold up:
 - **All-or-nothing** (the first implementation): the whole network stops at once. Harsh, and a single lab rack could switch off the oxygen generator.
 - **Proportional brownout**: everything runs at the same fraction. Smooth, but nothing is clearly off and all systems degrade together, which is hard to read.
 - **Player-set priorities**: more control, but a new command, UI and saved field before we know it's needed. Can be layered on top of the data defaults after playtesting.
+
+## Shedding item by item (revised after the prototype)
+
+Shedding first worked a whole tier per module at once: if a connection couldn't carry all four of a lab's racks, all four stopped. It now works item by item. Each module's loads run in a fixed order (its own systems, then equipment by tier, then slot-then-hardpoint order), and a module always runs a prefix of that list: within a tier, as many items run as fit, and the rest are shed from the end. The restart gap applies per item, so an item beyond what ran last tick restarts only on sunlight alone or full batteries. The saved state is a count of loads running per module (`Station.powerLoadsRunning`, save version 3) rather than a tier. Less equipment sits idle, and it's closer to how real load-shed lists switch individual loads.

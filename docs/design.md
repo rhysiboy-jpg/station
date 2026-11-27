@@ -51,7 +51,7 @@ Each **connection** carries only so much: the lower of its two modules' port rat
 
 ### Power shortages
 
-When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them.
+When a power network can't meet demand, equipment is **shed**, one item at a time, in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them.
 
 ### Reference figures (starting points, to be tuned)
 

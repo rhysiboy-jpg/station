@@ -3,6 +3,7 @@
 import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
 import { addLimits, FlowGraph, limitFlows, type ArcHandle } from "./flow";
 import { connectionLimitsOf, networksOf, type ConnectionLimit, type Network } from "./networks";
+import type { MountRef } from "./equipment";
 import { isOffline, moduleById, type ModuleId, type PlacedModule, type Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
@@ -91,6 +92,8 @@ export function batteryKey(moduleId: ModuleId, slot: number): string {
 interface Load {
   priority: number;
   kw: number;
+  /** Where the equipment is fitted; absent for the module's own systems. */
+  mount?: MountRef;
 }
 
 interface Pack {
@@ -101,13 +104,20 @@ interface Pack {
 
 // An offline module makes, uses and stores nothing until it recovers.
 
+/**
+ * A module's loads in the order they run: its own systems first, then its
+ * equipment by priority tier, and within a tier in slot-then-hardpoint order.
+ * A module always runs a prefix of this list, so shedding takes items from
+ * the end, one at a time (ADR 0004).
+ */
 function loadsOf(station: Station, module: PlacedModule): Load[] {
   if (isOffline(station, module.id)) return [];
-  const equipment = [...module.slots, ...module.hardpoints].flatMap((e) => (e ? [EQUIPMENT_TYPES[e]] : []));
-  return [
-    { priority: MODULE_SYSTEMS_PRIORITY, kw: MODULE_TYPES[module.type].draw },
-    ...equipment.map((e) => ({ priority: e.priority, kw: e.draw })),
-  ];
+  const fitted = (list: (keyof typeof EQUIPMENT_TYPES | null)[], kind: MountRef["kind"]): Load[] =>
+    list.flatMap((e, index) => (e ? [{ priority: EQUIPMENT_TYPES[e].priority, kw: EQUIPMENT_TYPES[e].draw, mount: { kind, index } }] : []));
+  const equipment = [...fitted(module.slots, "slot"), ...fitted(module.hardpoints, "hardpoint")];
+  // A stable sort keeps slot-then-hardpoint order within each tier.
+  equipment.sort((a, b) => a.priority - b.priority);
+  return [{ priority: MODULE_SYSTEMS_PRIORITY, kw: MODULE_TYPES[module.type].draw }, ...equipment];
 }
 
 function packsOf(station: Station, module: PlacedModule): Pack[] {
@@ -134,6 +144,16 @@ const packTotals = (packs: Pack[]) => ({
   capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
 });
 
+/** kW drawn by the first `count` loads. */
+const drawOf = (loads: Load[], count: number) => loads.slice(0, count).reduce((sum, l) => sum + l.kw, 0);
+
+/** The highest tier whose loads all run, when the first `count` loads do. */
+function fullTiers(loads: Load[], count: number): RunningUpTo {
+  if (count >= loads.length) return LOWEST_PRIORITY;
+  if (count === 0) return 0;
+  return (loads[count] as Load).priority - 1;
+}
+
 const demandUpTo = (loads: Load[], upTo: RunningUpTo) =>
   loads.reduce((sum, l) => (l.priority <= upTo ? sum + l.kw : sum), 0);
 
@@ -149,8 +169,10 @@ interface ModulePlan {
   module: PlacedModule;
   node: number;
   loads: Load[];
-  /** Tier it ran at last tick; restarting above it needs sunlight alone or full batteries. */
-  previous: RunningUpTo;
+  /** How many of its loads ran last tick; restarting any beyond those needs sunlight alone or full batteries. */
+  previous: number;
+  /** How many of its loads run this tick: always a prefix of `loads`. */
+  running: number;
   runningUpTo: RunningUpTo;
   stored: number;
   capacity: number;
@@ -195,12 +217,13 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   const nodes = new Map(modules.map((m, i) => [m.id, i + 2]));
   const nodeOf = (id: ModuleId) => nodes.get(id) as number;
 
-  // A module new to a shedding network is held to the most shed of its members.
-  const recorded = modules.flatMap((m) => {
-    const value = station.powerRunningUpTo[m.id];
-    return value === undefined ? [] : [value];
+  // A module new to a shedding network is held to the most shed tier of its members.
+  const loadsByModule = new Map(modules.map((m) => [m.id, loadsOf(station, m)]));
+  const recordedTiers = modules.flatMap((m) => {
+    const count = station.powerLoadsRunning[m.id];
+    return count === undefined ? [] : [fullTiers(loadsByModule.get(m.id) as Load[], count)];
   });
-  const fallback = Math.min(LOWEST_PRIORITY, ...recorded);
+  const fallbackTier = Math.min(LOWEST_PRIORITY, ...recordedTiers);
 
   const limits = connectionLimitsOf(station, network, "power");
   const handles = addLimits(graph, limits, nodeOf);
@@ -209,8 +232,11 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
     return {
       module,
       node: nodeOf(module.id),
-      loads: loadsOf(station, module),
-      previous: station.powerRunningUpTo[module.id] ?? fallback,
+      loads: loadsByModule.get(module.id) as Load[],
+      previous:
+        station.powerLoadsRunning[module.id] ??
+        (loadsByModule.get(module.id) as Load[]).filter((l) => l.priority <= fallbackTier).length,
+      running: 0,
       runningUpTo: 0,
       ...packTotals(packs),
       solar: solarOf(station, module, sunlit),
@@ -240,49 +266,64 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
     for (const p of plans) graph.setCapacity(p.battery, graph.flow(p.battery));
   };
 
-  /** Serves one tier's extra load at each of `group`, dropping modules it can't fully serve. */
-  const serve = (group: ModulePlan[], tier: Priority, batteries: boolean) => {
-    let trying = group;
-    while (trying.length > 0) {
+  /**
+   * Serves the given items (each module's next few loads, in order), dropping
+   * from the end one item at a time until everything left gets through. A
+   * module's items run as a prefix: if one can't, none after it does.
+   */
+  const serve = (group: { plan: ModulePlan; count: number }[], tier: Priority, batteries: boolean) => {
+    const want = group.map((g) => ({ ...g }));
+    for (;;) {
+      if (want.every((w) => w.count === 0)) return;
       const before = graph.clone();
-      const arcs = trying.map((p) => {
-        const extra = demandUpTo(p.loads, tier) - demandUpTo(p.loads, tier - 1);
-        return extra > 0 ? graph.addArc(p.node, SINK, extra) : undefined;
-      });
+      const arcs = want.map(({ plan, count }) =>
+        plan.loads.slice(plan.running, plan.running + count).map((l) => (l.kw > 0 ? graph.addArc(plan.node, SINK, l.kw) : undefined)),
+      );
       // Sunlight first, then batteries if allowed.
       freezeBatteries();
       graph.augment(SOURCE, SINK);
       if (batteries) allowBatteries(tier);
       graph.augment(SOURCE, SINK);
-      const failed = trying.filter((_, i) => {
-        const arc = arcs[i];
-        return arc !== undefined && !graph.saturated(arc);
+      let short = -1;
+      want.forEach((_, i) => {
+        if ((arcs[i] ?? []).some((arc) => arc !== undefined && !graph.saturated(arc))) short = i;
       });
-      if (failed.length === 0) {
-        for (const p of trying) p.runningUpTo = tier;
+      if (short === -1) {
+        for (const w of want) w.plan.running += w.count;
         return;
       }
-      // Drop one module and try again: the most recently built that came up short.
-      // (Dropping them all at once could lose modules that fit on their own.)
+      // Drop the last item of the most recently built module that came up short, and try again.
       graph.restore(before);
-      const drop = failed[failed.length - 1];
-      trying = trying.filter((p) => p !== drop);
+      (want[short] as { count: number }).count -= 1;
     }
   };
 
+  /** How many of a plan's next loads are in `tier`. */
+  const tierCount = (p: ModulePlan, tier: Priority) =>
+    p.loads.slice(p.running).filter((l) => l.priority === tier).length;
+
   for (let tier = 1 as Priority; tier <= LOWEST_PRIORITY; tier = (tier + 1) as Priority) {
     allowBatteries(tier);
-    const candidates = plans.filter((p) => p.runningUpTo === tier - 1);
+    // Only modules running every lower load go on to this tier.
+    const steps = plans
+      .filter((p) => p.running === p.loads.filter((l) => l.priority < tier).length)
+      .map((plan) => {
+        const start = plan.running;
+        const count = tierCount(plan, tier);
+        // Items up to what ran last tick may draw batteries to the tier's floor;
+        // items beyond it restart only on sunlight alone, or full batteries.
+        const keep = Math.max(0, Math.min(count, plan.previous - start));
+        return { plan, start, count, keep };
+      });
+    serve(steps.map(({ plan, keep }) => ({ plan, count: keep })), tier, true);
     serve(
-      candidates.filter((p) => tier <= p.previous),
-      tier,
-      true,
-    );
-    serve(
-      candidates.filter((p) => tier > p.previous),
+      steps
+        .filter(({ plan, start, keep }) => plan.running === start + keep)
+        .map(({ plan, count, keep }) => ({ plan, count: count - keep })),
       tier,
       full,
     );
+    for (const p of plans) p.runningUpTo = fullTiers(p.loads, p.running);
   }
 
   // Whatever sunlight is left charges batteries it can reach.
@@ -299,7 +340,7 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   if (findBottlenecks) {
     const trial = graph.clone();
     for (const p of plans) {
-      const missing = demandUpTo(p.loads, LOWEST_PRIORITY) - demandUpTo(p.loads, p.runningUpTo);
+      const missing = demandUpTo(p.loads, LOWEST_PRIORITY) - drawOf(p.loads, p.running);
       if (missing > 0) trial.addArc(p.node, SINK, missing);
       trial.setCapacity(p.battery, Math.max(trial.flow(p.battery), p.stored / HOURS_PER_TICK));
     }
@@ -317,6 +358,8 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   for (const p of plans) {
     for (let tier = p.runningUpTo + 1; tier <= LOWEST_PRIORITY; tier++) {
       const t = tier as Priority;
+      // Only tiers with something actually stopped get a reason.
+      if (!p.loads.slice(p.running).some((l) => l.priority === t)) continue;
       p.shed[t] =
         reachesModules && !reach?.has(p.node)
           ? { kind: "bottleneck" }
@@ -324,7 +367,7 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
             ? capacity > 0
               ? { kind: "battery-floor", floor: BATTERY_FLOORS[t] }
               : { kind: "no-supply" }
-            : t > p.previous
+            : p.running >= p.previous
               ? { kind: "waiting-for-full-battery" }
               : { kind: "bottleneck" };
     }
@@ -335,7 +378,7 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
     plans,
     production,
     demand: plans.reduce((sum, p) => sum + demandUpTo(p.loads, LOWEST_PRIORITY), 0),
-    draw: plans.reduce((sum, p) => sum + demandUpTo(p.loads, p.runningUpTo), 0),
+    draw: plans.reduce((sum, p) => sum + drawOf(p.loads, p.running), 0),
     stored,
     capacity,
     connections: limitFlows(graph, limits, handles, nodeOf, reach).map(({ onCut, ...c }) => ({
@@ -349,17 +392,21 @@ function modulePower(station: Station, module: PlacedModule, sunlit: boolean, pl
   const loads = loadsOf(station, module);
   const packs = packsOf(station, module);
   const offline = isOffline(station, module.id);
-  const runningUpTo = plan?.runningUpTo ?? 0;
-  const runs = (e: keyof typeof EQUIPMENT_TYPES | null) =>
-    !offline && e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
+  const count = plan?.running ?? 0;
+  const runningUpTo = fullTiers(loads, count);
+  // The first `count` loads run; mark the equipment behind them.
+  const running = { slots: module.slots.map(() => false), hardpoints: module.hardpoints.map(() => false) };
+  for (const load of loads.slice(0, offline ? 0 : count)) {
+    if (load.mount) running[load.mount.kind === "slot" ? "slots" : "hardpoints"][load.mount.index] = true;
+  }
   return {
     production: solarOf(station, module, sunlit),
     demand: demandUpTo(loads, LOWEST_PRIORITY),
-    draw: demandUpTo(loads, runningUpTo),
+    draw: drawOf(loads, count),
     ...packTotals(packs),
-    powered: !offline && runningUpTo >= MODULE_SYSTEMS_PRIORITY,
+    powered: !offline && count >= 1,
     offline,
-    running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },
+    running,
     runningUpTo,
     shed: plan?.shed ?? {},
   };
@@ -415,18 +462,18 @@ export function powerReport(station: Station, findBottlenecks: boolean): PowerRe
 }
 
 /** One tick of power flow on every network: shed equipment draws nothing, batteries take the difference. */
-export function stepPower(station: Station): Pick<Station, "batteries" | "powerRunningUpTo"> {
+export function stepPower(station: Station): Pick<Station, "batteries" | "powerLoadsRunning"> {
   const sunlit = orbitOf(station).phase === "day";
   // Batteries in offline modules sit out of every network but keep their charge.
   const batteries: Record<string, number> = Object.fromEntries(
     Object.entries(station.batteries).filter(([key]) => isOffline(station, Number(key.split(":")[0]))),
   );
-  const powerRunningUpTo: Record<ModuleId, RunningUpTo> = {};
+  const powerLoadsRunning: Record<ModuleId, number> = {};
 
   for (const network of networksOf(station, "power")) {
     const r = resolve(station, network, sunlit, false);
     for (const p of r.plans) {
-      powerRunningUpTo[p.module.id] = p.runningUpTo;
+      powerLoadsRunning[p.module.id] = p.running;
       // Each module's batteries give what flowed out of them and take what flowed in.
       let energy = p.netCharge * HOURS_PER_TICK;
       for (const pack of packsOf(station, p.module)) {
@@ -436,5 +483,5 @@ export function stepPower(station: Station): Pick<Station, "batteries" | "powerR
       }
     }
   }
-  return { batteries, powerRunningUpTo };
+  return { batteries, powerLoadsRunning };
 }

@@ -19,8 +19,11 @@ import { bedsOf, crewOf, type Air, type ChallengeRun, type PlacedModule, type St
 /**
  * Bump when the format changes, and teach `loadStation` to upgrade older files.
  * 1: first format. 2: adds `challenge` (version 1 files load in free play).
+ * 3: power shedding goes item by item: `powerRunningUpTo` (a tier per module)
+ *    becomes `powerLoadsRunning` (a count of loads). Older files start with
+ *    nothing recorded as shed, which settles within a tick.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 const GAME = "orbitwright";
 
 type SavedStation = Omit<Station, "history">;
@@ -69,7 +72,8 @@ function readFile(file: unknown): Station {
     modules,
     nextModuleId: wholeNumber(s.nextModuleId, "nextModuleId"),
     batteries: record(s.batteries, "batteries", (v, k) => amount(v, `batteries.${k}`)),
-    powerRunningUpTo: record(s.powerRunningUpTo, "powerRunningUpTo", (v, k) => tier(v, `powerRunningUpTo.${k}`)),
+    powerLoadsRunning:
+      version < 3 ? {} : record(s.powerLoadsRunning, "powerLoadsRunning", (v, k) => wholeNumber(v, `powerLoadsRunning.${k}`)),
     air: record(s.air, "air", (v, k) => readAir(v, `air.${k}`)),
     water: record(s.water, "water", (v, k) => amount(v, `water.${k}`)),
     temperature: record(s.temperature, "temperature", (v, k) => finite(v, `temperature.${k}`)),
@@ -197,11 +201,6 @@ function wholeNumber(value: unknown, field: string): number {
   return n;
 }
 
-function tier(value: unknown, field: string): number {
-  const n = wholeNumber(value, field);
-  if (n > 4) fail(`Part of the save is broken: ${field} isn't a priority tier.`);
-  return n;
-}
 
 function boolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") fail(`Part of the save is broken: ${field} isn't true or false.`);

@@ -99,6 +99,17 @@ describe("older saves", () => {
   });
 });
 
+describe("version 2 saves", () => {
+  it("load with no record of shedding, which settles within a tick", () => {
+    const v3 = JSON.parse(saveStation(busyStation())) as { version: number; station: Record<string, unknown> };
+    delete v3.station.powerLoadsRunning;
+    v3.station.powerRunningUpTo = { 1: 4 };
+    const result = loadStation(JSON.stringify({ ...v3, version: 2 }));
+
+    expect(result.ok && result.station.powerLoadsRunning).toEqual({});
+  });
+});
+
 describe("loading a bad file", () => {
   const good = () => JSON.parse(saveStation(busyStation())) as { game: string; version: number; station: Record<string, unknown> };
   const rejects = (file: unknown, message: RegExp) => {
