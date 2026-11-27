@@ -79,12 +79,13 @@ The first version uses an abstract **headcount** per module: modules need N crew
 
 ## Failure
 
+- Removing a module is instant and free, but refused while it has crew aboard or if the habitats left couldn't sleep everyone; move or reduce the crew first, so removal never strands anyone.
 - Each module has thresholds for temperature, air (O2 and CO2), water and power. Crossing them raises a **yellow** then a **red** warning, and every current warning is listed in the alerts list.
 - A module that stays red for a quarter orbit (about 30 s at 1x) goes **offline**. A countdown shows how long is left, and dropping back below red calls it off. While offline it makes, uses and stores nothing, and its crew move to the nearest reachable modules that are online with nothing in red, filling each up to its room. If they don't all fit, the station is abandoned.
 - Some conditions only count with crew aboard. Temperature always counts. Air and water only count when the module has crew, because they only harm people: an empty module with stale air shows a warning but doesn't count down.
 - Power never takes a module offline by itself. A dark module is a red warning, and the harm comes through its effects: scrubbers stop, radiators stop.
 - An offline module recovers automatically once every reading that counts is back below yellow. Repairs needing crew or spare parts come with the full game.
-- **Difficulty** decides what an offline module does to the networks it sits on. On **Standard** its hull still carries power, heat, air and water through to the modules beyond. On **Hard** it cuts them, splitting the station.
+- **Difficulty** ([ADR 0006](adr/0006-difficulty-decides-what-offline-modules-cut.md)) decides what an offline module does to the networks it sits on. On **Standard** its hull still carries power, heat, air and water through to the modules beyond. On **Hard** it cuts them, splitting the station.
 - The station is **abandoned**, the only game over, when crew must leave a module and nowhere fit is reachable. The banner says what drove them out.
 
 ## Campaign (direction only, detail deferred)

@@ -94,6 +94,7 @@ export function renderStatus(station: Station): void {
     const level = Math.max(levelOf(AIR_LIMITS.o2, o2, true), levelOf(AIR_LIMITS.co2, co2, false)) as 0 | 1 | 2;
     status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)}`, LEVEL_CLASS[level]);
   }
+  text("air-oxygen", `${life.oxygen.toFixed(1)} kg`);
   const water = life.water;
   const waterLevel: 0 | 1 | 2 = water.capacity === 0 ? 0 : water.stored === 0 ? 2 : water.stored < water.capacity * 0.25 ? 1 : 0;
   status(

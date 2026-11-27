@@ -41,6 +41,8 @@ export interface LifeSupportReport {
   beds: number;
   /** Air in each pressurised module. */
   modules: Record<ModuleId, ModuleAir>;
+  /** kg of oxygen in the air across every pressurised module. */
+  oxygen: number;
   water: { stored: number; capacity: number; networks: WaterNetwork[] };
 }
 
@@ -67,10 +69,12 @@ function runningEquipment(module: PlacedModule, power: PowerReport): EquipmentTy
 
 export function lifeSupportOf(station: Station): LifeSupportReport {
   const modules: Record<ModuleId, ModuleAir> = {};
+  let oxygen = 0;
   for (const module of station.modules) {
     const volume = volumeOf(module);
     if (!MODULE_TYPES[module.type].pressurised || volume === 0) continue;
     const air = airOf(station, module);
+    oxygen += air.o2;
     modules[module.id] = {
       crew: module.crew,
       o2: (air.o2 / volume) * KPA_PER_DENSITY.o2,
@@ -89,6 +93,7 @@ export function lifeSupportOf(station: Station): LifeSupportReport {
     crew: crewOf(station.modules),
     beds: bedsOf(station.modules),
     modules,
+    oxygen,
     water: {
       stored: networks.reduce((sum, n) => sum + n.stored, 0),
       capacity: networks.reduce((sum, n) => sum + n.capacity, 0),

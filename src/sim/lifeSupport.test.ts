@@ -87,6 +87,15 @@ describe("crew headcount", () => {
 });
 
 describe("air", () => {
+  it("totals the oxygen aboard across every pressurised module, in kg", () => {
+    // Fresh air at 21 kPa O2 holds about 0.275 kg of oxygen per m³.
+    const station = run(createStation(), habitat);
+    const volume = MODULE_TYPES["core-node"].volume + MODULE_TYPES.habitat.volume;
+
+    expect(lifeSupportOf(station).oxygen).toBeCloseTo((21 / 76.43) * volume, 1);
+    expect(lifeSupportOf(advance(run(station, crew(2, 4)), TICKS_PER_ORBIT)).oxygen).toBeLessThan(lifeSupportOf(station).oxygen);
+  });
+
   it("starts at sea-level oxygen and no CO2 in a new module", () => {
     const air = lifeSupportOf(run(createStation(), habitat)).modules[2];
 
