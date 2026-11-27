@@ -55,7 +55,7 @@ When a power network can't meet demand, equipment is **shed** in priority tiers,
 
 ### Reference figures (starting points, to be tuned)
 
-Approximate real-world values to start balancing from. Every deviation goes in a "balance changes" list in this document.
+Approximate real-world values to start balancing from. Every deviation goes in a "balance changes" list in this document. The rules new parts follow (units, resources, module and equipment rules) are in [content-rules.md](content-rules.md).
 
 - Oxygen: about 0.84 kg per person per day. CO2 produced: about 1 kg per person per day.
 - Water: roughly 3 kg per person per day for drinking and food, before hygiene.
