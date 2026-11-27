@@ -47,7 +47,7 @@ Lab racks make data only while powered and tended: each crew member tends two ra
 
 ### Bottlenecks
 
-Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every connection filled by how much of it is in use, with bottlenecks in red. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
+Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every connection filled by how much of it is in use, with bottlenecks in red; the Limits overlay (B) shows every connection at its busiest across power and heat, tags each bottleneck with what it limits (P, H), and marks modules left short of power. Air connections are fans that swap air by difference in concentration, so they never fill up and aren't shown. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
 
 ### Power shortages
 

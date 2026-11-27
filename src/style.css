@@ -191,6 +191,7 @@ html, body {
 .net.air { --net: var(--air); }
 .net.water { --net: var(--water); }
 .net.data { --net: var(--data); }
+.net.bottlenecks { --net: var(--ink); }
 .overlays button[aria-pressed="true"].net { border-color: var(--net); }
 .overlays button { justify-content: center; gap: 4px; }
 .overlays button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }

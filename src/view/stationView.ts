@@ -232,7 +232,7 @@ function outwardRect(point: PlacedPort, from: number, depth: number, span: numbe
  * of its capacity is in use: dim when quiet, yellow when nearly full, red
  * and wider when it is the bottleneck.
  */
-function drawConnection(connection: ConnectionOverlay): Graphics {
+function drawConnection(connection: ConnectionOverlay): Container {
   const gap = MODULE_INSET * 2;
   const colour = connection.bottleneck ? palette.danger : connection.load >= 0.75 ? palette.warning : palette.label;
   const span = connection.bottleneck ? 20 : 14;
@@ -241,7 +241,16 @@ function drawConnection(connection: ConnectionOverlay): Graphics {
   // The filled share, from the middle outwards.
   const filled = span * Math.max(0.08, connection.load);
   g.poly(outwardRect(connection.port, 1, gap - 2, filled)).fill({ color: colour, alpha: connection.bottleneck ? 1 : 0.85 });
-  return g;
+  if (!connection.label) return g;
+  // Name what the bottleneck limits, just beside it along the edge.
+  const layer = new Container();
+  layer.addChild(g);
+  const f = edgeFrame(connection.port);
+  const tag = new Text({ text: connection.label, style: { fontFamily: FONT, fontSize: 11, fill: palette.danger, fontWeight: "bold" } });
+  tag.anchor.set(0.5);
+  tag.position.set(f.x + f.out[0] * MODULE_INSET + f.along[0] * 18, f.y + f.out[1] * MODULE_INSET + f.along[1] * 18);
+  layer.addChild(tag);
+  return layer;
 }
 
 function drawPort(port: PlacedPort, colour: number): Graphics {

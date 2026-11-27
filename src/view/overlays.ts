@@ -16,7 +16,7 @@ import {
 } from "../sim";
 import { palette } from "./palette";
 
-export type OverlayKind = "power" | "heat" | "air" | "water" | "data";
+export type OverlayKind = "power" | "heat" | "air" | "water" | "data" | "bottlenecks";
 
 export const OVERLAYS: { kind: OverlayKind; name: string; key: string }[] = [
   { kind: "power", name: "Power", key: "p" },
@@ -24,6 +24,7 @@ export const OVERLAYS: { kind: OverlayKind; name: string; key: string }[] = [
   { kind: "air", name: "Air", key: "o" },
   { kind: "water", name: "Water", key: "u" },
   { kind: "data", name: "Data", key: "t" },
+  { kind: "bottlenecks", name: "Limits", key: "b" },
 ];
 
 export interface ModuleOverlay {
@@ -38,6 +39,8 @@ export interface ConnectionOverlay {
   /** Share of its capacity in use, 0 to 1. */
   load: number;
   bottleneck: boolean;
+  /** Short tag drawn beside a bottleneck, naming what it limits (e.g. "P", "H"). */
+  label?: string;
 }
 
 export interface Overlay {
@@ -123,6 +126,39 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
             figureColour: levelTint(level, palette.label),
           };
         });
+      }
+      break;
+    }
+    case "bottlenecks": {
+      // Every connection at its busiest across power and heat, bottlenecks named.
+      const power = powerOf(station);
+      const heat = heatOf(station);
+      const key = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+      const merged = new Map<string, ConnectionOverlay>();
+      for (const [tag, flows] of [["P", power.connections], ["H", heat.connections]] as const) {
+        for (const c of flows) {
+          const k = `${key(c.a, c.b)}@${c.port.x},${c.port.y},${c.port.side}`;
+          const load = c.capacity > 0 ? Math.min(1, Math.abs(c.flow) / c.capacity) : 0;
+          const seen = merged.get(k);
+          const label = [seen?.label, c.bottleneck ? tag : undefined].filter(Boolean).join("+") || undefined;
+          merged.set(k, {
+            port: c.port,
+            load: Math.max(load, seen?.load ?? 0),
+            bottleneck: c.bottleneck || (seen?.bottleneck ?? false),
+            label,
+          });
+        }
+      }
+      connections = [...merged.values()];
+      // Modules left short of power by a full connection.
+      for (const m of station.modules) {
+        const shed = Object.values(power.modules[m.id]?.shed ?? {});
+        const short = shed.some((r) => r?.kind === "bottleneck");
+        overlay[m.id] = {
+          tint: short ? palette.warning : palette.label,
+          figure: short ? "power short" : undefined,
+          figureColour: palette.warning,
+        };
       }
       break;
     }
