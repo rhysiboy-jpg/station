@@ -253,7 +253,8 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     html.push(`</dl>`);
   }
 
-  const heat = heatOf(station).modules[module.id];
+  const heatReport = heatOf(station);
+  const heat = heatReport.modules[module.id];
   if (heat) {
     html.push(`<h3>Heat</h3><dl class="totals">`);
     html.push(
@@ -266,6 +267,26 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     }
     html.push(`</dl>`);
   }
+  // Joints: what each connection to a neighbour carries, against its capacity.
+  const powerJoints = powerOf(station).joints.filter((j) => j.a === module.id || j.b === module.id);
+  if (powerJoints.length > 0) {
+    html.push(`<h3>Joints</h3><dl class="totals">`);
+    for (const pj of powerJoints) {
+      const other = pj.a === module.id ? pj.b : pj.a;
+      const otherModule = station.modules.find((m) => m.id === other);
+      const hj = heatReport.joints.find((h) => (h.a === pj.a && h.b === pj.b) || (h.a === pj.b && h.b === pj.a));
+      const part = (flow: number, capacity: number, bottleneck: boolean, unit: string) =>
+        `<span class="${bottleneck ? "bad" : Math.abs(flow) >= capacity * 0.75 ? "warn" : ""}">${Math.abs(flow).toFixed(1)}/${capacity} ${unit}</span>`;
+      html.push(
+        `<dt>${otherModule ? MODULE_TYPES[otherModule.type].short : "?"}</dt><dd>` +
+          `power ${part(pj.flow, pj.capacity, pj.bottleneck, "kW")}` +
+          (hj ? ` · heat ${part(hj.flow, hj.capacity, hj.bottleneck, "kW")}` : "") +
+          `</dd>`,
+      );
+    }
+    html.push(`</dl>`);
+  }
+
 
   html.push(`<h3>Slots (${module.slots.length})</h3>`);
   if (module.slots.length === 0) html.push(`<p class="muted">No internal slots.</p>`);
@@ -380,6 +401,8 @@ function shedText(reason: ShedReason | undefined): string {
       return reason.floor > 0 ? `battery below ${Math.round(reason.floor * 100)}%` : "battery empty";
     case "waiting-for-full-battery":
       return "waiting for full battery";
+    case "bottleneck":
+      return "a joint on the way is full";
     default:
       return "no power";
   }

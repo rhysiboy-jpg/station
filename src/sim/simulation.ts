@@ -2,7 +2,7 @@
 import { stepFailure } from "./failure";
 import { stepHeat } from "./heat";
 import { stepLifeSupport } from "./lifeSupport";
-import { powerOf, stepPower } from "./power";
+import { powerReport, stepPower } from "./power";
 import type { Station } from "./station";
 
 /** Runs the simulation forward by a whole number of ticks. Never mutates. */
@@ -14,7 +14,7 @@ export function advance(station: Station, ticks: number): Station {
 
 /** Every system reads the same starting state and power verdict, so their order doesn't matter. */
 function step(station: Station): Station {
-  const power = powerOf(station);
+  const power = powerReport(station, false);
   return {
     ...station,
     ...stepPower(station),

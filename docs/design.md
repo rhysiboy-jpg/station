@@ -41,6 +41,10 @@ Modules joined by ports form one shared **network** per resource. Each **connect
 
 Only **pressurised** modules join the air network. Unlike the other resources, air isn't one shared pool: each pressurised module has its own O2 and CO2, and fans slowly mix it with attached modules, so a crowded habitat far from the scrubber goes bad first ([ADR 0005](adr/0005-per-module-air.md)). Water is pooled per network in tanks built into some modules.
 
+### Bottlenecks
+
+Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every joint filled by how much of it is in use, with bottlenecks in red. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
+
 ### Power shortages
 
 When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them. Later resources, in rough order: fuel (reboosts in low orbit), food, spare parts, radiation.

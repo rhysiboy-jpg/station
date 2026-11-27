@@ -1,7 +1,8 @@
 // Power: solar panels make it in Day, batteries store it, everything powered draws it.
 // In a shortage, equipment is shed by priority (ADR 0004).
 import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
-import { networksOf, type Network } from "./networks";
+import { FlowGraph, type ArcHandle } from "./flow";
+import { jointsOf, networksOf, type Joint, type Network } from "./networks";
 import { isOffline, type ModuleId, type PlacedModule, type Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
@@ -22,7 +23,9 @@ export type ShedReason =
   /** The battery is down to this tier's floor (a fraction of capacity). */
   | { kind: "battery-floor"; floor: number }
   /** There is enough now, but a shed tier only restarts on a full battery or sunlight alone. */
-  | { kind: "waiting-for-full-battery" };
+  | { kind: "waiting-for-full-battery" }
+  /** The station has the power, but a joint on the way here is full. */
+  | { kind: "bottleneck" };
 
 /** Shed tiers and why each is off. Running tiers are absent. */
 export type ShedTiers = Partial<Record<Priority, ShedReason>>;
@@ -44,7 +47,7 @@ export interface ModulePower {
   /** Which of its equipment is running, in the module's slot and hardpoint order. Empty mounts are false. */
   running: { slots: boolean[]; hardpoints: boolean[] };
   runningUpTo: RunningUpTo;
-  /** Why each shed tier on its network is off. */
+  /** Why each of its shed tiers is off. */
   shed: ShedTiers;
 }
 
@@ -59,8 +62,8 @@ export interface NetworkPower {
   powered: boolean;
   /** Everything on it is running: nothing is shed. */
   supplied: boolean;
+  /** The lowest tier any of its modules runs at. */
   runningUpTo: RunningUpTo;
-  shed: ShedTiers;
 }
 
 export interface PowerReport {
@@ -77,6 +80,8 @@ export interface PowerReport {
   supplied: boolean;
   networks: NetworkPower[];
   modules: Record<ModuleId, ModulePower>;
+  /** Every joint on a power network, with its flow and whether it is a bottleneck. */
+  joints: JointFlow[];
 }
 
 export function batteryKey(moduleId: ModuleId, slot: number): string {
@@ -126,92 +131,224 @@ function solarOf(station: Station, module: PlacedModule, sunlit: boolean): numbe
 const demandUpTo = (loads: Load[], upTo: RunningUpTo) =>
   loads.reduce((sum, l) => (l.priority <= upTo ? sum + l.kw : sum), 0);
 
+/** One joint's flow this tick (power or heat). */
+export interface JointFlow extends Joint {
+  /** kW from a to b (negative: b to a). */
+  flow: number;
+  /** It limits what reaches the modules beyond it: a bigger joint would let more run. */
+  bottleneck: boolean;
+}
+
+interface ModulePlan {
+  module: PlacedModule;
+  node: number;
+  loads: Load[];
+  /** Tier it ran at last tick; restarting above it needs sunlight alone or full batteries. */
+  previous: RunningUpTo;
+  runningUpTo: RunningUpTo;
+  stored: number;
+  capacity: number;
+  solar: number;
+  battery: ArcHandle;
+  charge?: ArcHandle;
+  /** kW into its batteries this tick (negative: out of them). */
+  netCharge: number;
+  shed: ShedTiers;
+}
+
 interface Resolved {
   network: Network;
-  modules: PlacedModule[];
+  plans: ModulePlan[];
   production: number;
   demand: number;
   draw: number;
   stored: number;
   capacity: number;
-  packs: Pack[];
-  runningUpTo: RunningUpTo;
-  shed: ShedTiers;
+  joints: JointFlow[];
 }
 
+const SOURCE = 0;
+const SINK = 1;
+
 /**
- * Decides what runs on one network for the coming tick.
+ * Decides what runs on one network for the coming tick, routing power through
+ * its joints (connection bottlenecks).
  *
- * Shedding: from what ran last tick, drop the lowest-priority tiers until the
- * rest can be covered for one tick by sunlight plus the charge above the
- * lowest running tier's battery floor.
- * Restarting: a shed tier comes back only once sunlight alone covers it, or
- * the batteries are full and can cover it. That gap stops equipment flickering
- * on and off as a battery gains a little charge.
+ * Tiers are served in priority order, each on top of the last, so a lower tier
+ * never takes power a higher one needs. A module runs a tier only if all of
+ * that tier's load at the module gets through; modules that don't fit are
+ * dropped from the tier and the rest tried again.
+ *
+ * Shedding: a tier may draw batteries only down to its floor (ADR 0004).
+ * Restarting: a module above the tier it ran last tick needs sunlight alone,
+ * or full batteries, so equipment doesn't flicker as a battery gains charge.
  */
-function resolve(station: Station, network: Network, sunlit: boolean): Resolved {
+function resolve(station: Station, network: Network, sunlit: boolean, findBottlenecks: boolean): Resolved {
   const modules = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
-  const loads = modules.flatMap((m) => loadsOf(station, m));
-  const packs = modules.flatMap((m) => packsOf(station, m));
-  const production = modules.reduce((sum, m) => sum + solarOf(station, m, sunlit), 0);
-  const stored = packs.reduce((sum, p) => sum + p.charge, 0);
-  const capacity = packs.reduce((sum, p) => sum + p.capacity, 0);
+  const graph = new FlowGraph(modules.length + 2);
+  const nodeOf = new Map(modules.map((m, i) => [m.id, i + 2]));
+
+  // A module new to a shedding network is held to the most shed of its members.
+  const recorded = modules.flatMap((m) => {
+    const value = station.powerRunningUpTo[m.id];
+    return value === undefined ? [] : [value];
+  });
+  const fallback = Math.min(LOWEST_PRIORITY, ...recorded);
+
+  const joints = jointsOf(station, network, "power").map((joint) => ({
+    joint,
+    link: graph.addLink(nodeOf.get(joint.a) as number, nodeOf.get(joint.b) as number, joint.capacity),
+  }));
+  const plans: ModulePlan[] = modules.map((module) => {
+    const packs = packsOf(station, module);
+    return {
+      module,
+      node: nodeOf.get(module.id) as number,
+      loads: loadsOf(station, module),
+      previous: station.powerRunningUpTo[module.id] ?? fallback,
+      runningUpTo: 0,
+      stored: packs.reduce((sum, p) => sum + p.charge, 0),
+      capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
+      solar: solarOf(station, module, sunlit),
+      // Placeholders; set below so every solar arc comes before any battery arc
+      // and searches use sunlight first.
+      battery: { node: 0, index: 0 },
+      netCharge: 0,
+      shed: {},
+    };
+  });
+  for (const plan of plans) graph.addArc(SOURCE, plan.node, plan.solar);
+  for (const plan of plans) plan.battery = graph.addArc(SOURCE, plan.node, 0);
+
+  const production = plans.reduce((sum, p) => sum + p.solar, 0);
+  const stored = plans.reduce((sum, p) => sum + p.stored, 0);
+  const capacity = plans.reduce((sum, p) => sum + p.capacity, 0);
   const full = capacity > 0 && stored >= capacity - FULL_TOLERANCE;
 
-  // Sunlight first; any deficit comes from batteries, but only down to the tier's floor.
-  const coverable = (upTo: RunningUpTo) => {
-    const deficit = (demandUpTo(loads, upTo) - production) * HOURS_PER_TICK;
-    return deficit <= 0 || deficit <= stored - BATTERY_FLOORS[upTo as Priority] * capacity;
-  };
-  const bySunlight = (upTo: RunningUpTo) => demandUpTo(loads, upTo) <= production;
-
-  // A network that just formed, or gained modules, is held to the most shed of its members.
-  const previous = Math.min(
-    LOWEST_PRIORITY,
-    ...network.moduleIds.map((id) => station.powerRunningUpTo[id] ?? LOWEST_PRIORITY),
-  );
-  let runningUpTo = previous;
-  while (runningUpTo > 0 && !coverable(runningUpTo)) runningUpTo--;
-  if (runningUpTo === previous) {
-    for (let upTo = previous + 1; upTo <= LOWEST_PRIORITY; upTo++) {
-      if (bySunlight(upTo) || (full && coverable(upTo))) runningUpTo = upTo;
+  /** kW each module's batteries may give while serving up to `tier`, never less than they already give. */
+  const allowBatteries = (tier: Priority) => {
+    for (const p of plans) {
+      const available = Math.max(0, p.stored - BATTERY_FLOORS[tier] * p.capacity) / HOURS_PER_TICK;
+      graph.setCapacity(p.battery, Math.max(graph.flow(p.battery), available));
     }
+  };
+  const freezeBatteries = () => {
+    for (const p of plans) graph.setCapacity(p.battery, graph.flow(p.battery));
+  };
+
+  /** Serves one tier's extra load at each of `group`, dropping modules it can't fully serve. */
+  const serve = (group: ModulePlan[], tier: Priority, batteries: boolean) => {
+    let trying = group;
+    while (trying.length > 0) {
+      const before = graph.clone();
+      const arcs = trying.map((p) => {
+        const extra = demandUpTo(p.loads, tier) - demandUpTo(p.loads, tier - 1);
+        return extra > 0 ? graph.addArc(p.node, SINK, extra) : undefined;
+      });
+      // Sunlight first, then batteries if allowed.
+      freezeBatteries();
+      graph.augment(SOURCE, SINK);
+      if (batteries) allowBatteries(tier);
+      graph.augment(SOURCE, SINK);
+      const failed = trying.filter((_, i) => {
+        const arc = arcs[i];
+        return arc !== undefined && !graph.saturated(arc);
+      });
+      if (failed.length === 0) {
+        for (const p of trying) p.runningUpTo = tier;
+        return;
+      }
+      // Drop one module and try again: the most recently built that came up short.
+      // (Dropping them all at once could lose modules that fit on their own.)
+      graph.restore(before);
+      const drop = failed[failed.length - 1];
+      trying = trying.filter((p) => p !== drop);
+    }
+  };
+
+  for (let tier = 1 as Priority; tier <= LOWEST_PRIORITY; tier = (tier + 1) as Priority) {
+    allowBatteries(tier);
+    const candidates = plans.filter((p) => p.runningUpTo === tier - 1);
+    serve(
+      candidates.filter((p) => tier <= p.previous),
+      tier,
+      true,
+    );
+    serve(
+      candidates.filter((p) => tier > p.previous),
+      tier,
+      full,
+    );
   }
 
-  const shed: ShedTiers = {};
-  for (let tier = runningUpTo + 1; tier <= LOWEST_PRIORITY; tier++) {
-    const floor = BATTERY_FLOORS[tier as Priority];
-    shed[tier as Priority] = coverable(tier)
-      ? { kind: "waiting-for-full-battery" }
-      : capacity > 0
-        ? { kind: "battery-floor", floor }
-        : { kind: "no-supply" };
+  // Whatever sunlight is left charges batteries it can reach.
+  freezeBatteries();
+  for (const p of plans) {
+    if (p.capacity > p.stored) p.charge = graph.addArc(p.node, SINK, (p.capacity - p.stored) / HOURS_PER_TICK);
+  }
+  graph.augment(SOURCE, SINK);
+  for (const p of plans) p.netCharge = (p.charge ? graph.flow(p.charge) : 0) - graph.flow(p.battery);
+
+  // Bottlenecks: try to serve everything still shed, with batteries down to empty;
+  // joints on the cut between what power can reach and what it can't are the limit.
+  let reach: Set<number> | undefined;
+  if (findBottlenecks) {
+    const trial = graph.clone();
+    for (const p of plans) {
+      const missing = demandUpTo(p.loads, LOWEST_PRIORITY) - demandUpTo(p.loads, p.runningUpTo);
+      if (missing > 0) trial.addArc(p.node, SINK, missing);
+      trial.setCapacity(p.battery, Math.max(trial.flow(p.battery), p.stored / HOURS_PER_TICK));
+    }
+    trial.augment(SOURCE, SINK);
+    reach = trial.reachable(SOURCE);
+  }
+  const reachesModules = reach !== undefined && plans.some((p) => reach?.has(p.node));
+
+  // Why each module's shed tiers are off.
+  const loads = plans.flatMap((p) => p.loads);
+  const coverable = (tier: Priority) => {
+    const deficit = (demandUpTo(loads, tier) - production) * HOURS_PER_TICK;
+    return deficit <= 0 || deficit <= stored - BATTERY_FLOORS[tier] * capacity;
+  };
+  for (const p of plans) {
+    for (let tier = p.runningUpTo + 1; tier <= LOWEST_PRIORITY; tier++) {
+      const t = tier as Priority;
+      p.shed[t] =
+        reachesModules && !reach?.has(p.node)
+          ? { kind: "bottleneck" }
+          : !coverable(t)
+            ? capacity > 0
+              ? { kind: "battery-floor", floor: BATTERY_FLOORS[t] }
+              : { kind: "no-supply" }
+            : t > p.previous
+              ? { kind: "waiting-for-full-battery" }
+              : { kind: "bottleneck" };
+    }
   }
 
   return {
     network,
-    modules,
+    plans,
     production,
-    demand: demandUpTo(loads, LOWEST_PRIORITY),
-    draw: demandUpTo(loads, runningUpTo),
+    demand: plans.reduce((sum, p) => sum + demandUpTo(p.loads, LOWEST_PRIORITY), 0),
+    draw: plans.reduce((sum, p) => sum + demandUpTo(p.loads, p.runningUpTo), 0),
     stored,
     capacity,
-    packs,
-    runningUpTo,
-    shed,
+    joints: joints.map(({ joint, link }) => {
+      const nodeA = nodeOf.get(joint.a) as number;
+      const nodeB = nodeOf.get(joint.b) as number;
+      const flow = graph.flow(link);
+      const cut = reach !== undefined && reach.has(nodeA) !== reach.has(nodeB);
+      return { ...joint, flow, bottleneck: reachesModules && cut };
+    }),
   };
 }
 
-function modulePower(
-  station: Station,
-  module: PlacedModule,
-  sunlit: boolean,
-  runningUpTo: RunningUpTo,
-  shed: ShedTiers,
-): ModulePower {
+function modulePower(station: Station, module: PlacedModule, sunlit: boolean, plan?: ModulePlan): ModulePower {
   const loads = loadsOf(station, module);
   const packs = packsOf(station, module);
   const offline = isOffline(station, module.id);
+  const runningUpTo = plan?.runningUpTo ?? 0;
   const runs = (e: keyof typeof EQUIPMENT_TYPES | null) =>
     !offline && e !== null && EQUIPMENT_TYPES[e].priority <= runningUpTo;
   return {
@@ -224,17 +361,28 @@ function modulePower(
     offline,
     running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },
     runningUpTo,
-    shed,
+    shed: plan?.shed ?? {},
   };
 }
 
-/** Current power figures for the station, each network and each module: what runs this coming tick. */
+/** Current power figures for the station, each network, module and joint: what runs this coming tick. */
 export function powerOf(station: Station): PowerReport {
+  return powerReport(station, true);
+}
+
+/**
+ * The power report, optionally without working out which joints are
+ * bottlenecks (only the view needs that; the tick doesn't).
+ */
+export function powerReport(station: Station, findBottlenecks: boolean): PowerReport {
   const sunlit = orbitOf(station).phase === "day";
   const modules: Record<ModuleId, ModulePower> = {};
+  const joints: JointFlow[] = [];
   const networks = networksOf(station, "power").map((network): NetworkPower => {
-    const r = resolve(station, network, sunlit);
-    for (const m of r.modules) modules[m.id] = modulePower(station, m, sunlit, r.runningUpTo, r.shed);
+    const r = resolve(station, network, sunlit, findBottlenecks);
+    for (const p of r.plans) modules[p.module.id] = modulePower(station, p.module, sunlit, p);
+    joints.push(...r.joints);
+    const runningUpTo = Math.min(...r.plans.map((p) => p.runningUpTo));
     return {
       moduleIds: network.moduleIds,
       production: r.production,
@@ -242,14 +390,13 @@ export function powerOf(station: Station): PowerReport {
       draw: r.draw,
       stored: r.stored,
       capacity: r.capacity,
-      powered: r.runningUpTo >= MODULE_SYSTEMS_PRIORITY,
-      supplied: r.runningUpTo >= LOWEST_PRIORITY,
-      runningUpTo: r.runningUpTo,
-      shed: r.shed,
+      powered: r.plans.every((p) => p.runningUpTo >= MODULE_SYSTEMS_PRIORITY),
+      supplied: r.plans.every((p) => p.runningUpTo >= LOWEST_PRIORITY),
+      runningUpTo,
     };
   });
   // On hard difficulty an offline module belongs to no network; it still gets (empty) figures.
-  for (const m of station.modules) modules[m.id] ??= modulePower(station, m, sunlit, 0, {});
+  for (const m of station.modules) modules[m.id] ??= modulePower(station, m, sunlit);
   const sum = (key: "production" | "demand" | "draw" | "stored" | "capacity") =>
     networks.reduce((total, n) => total + n[key], 0);
   return {
@@ -263,6 +410,7 @@ export function powerOf(station: Station): PowerReport {
     supplied: networks.every((n) => n.supplied),
     networks,
     modules,
+    joints,
   };
 }
 
@@ -276,15 +424,17 @@ export function stepPower(station: Station): Pick<Station, "batteries" | "powerR
   const powerRunningUpTo: Record<ModuleId, RunningUpTo> = {};
 
   for (const network of networksOf(station, "power")) {
-    const r = resolve(station, network, sunlit);
-    let energy = (r.production - r.draw) * HOURS_PER_TICK;
-    for (const pack of r.packs) {
-      const change = energy >= 0 ? Math.min(energy, pack.capacity - pack.charge) : -Math.min(-energy, pack.charge);
-      pack.charge += change;
-      energy -= change;
-      batteries[pack.key] = pack.charge;
+    const r = resolve(station, network, sunlit, false);
+    for (const p of r.plans) {
+      powerRunningUpTo[p.module.id] = p.runningUpTo;
+      // Each module's batteries give what flowed out of them and take what flowed in.
+      let energy = p.netCharge * HOURS_PER_TICK;
+      for (const pack of packsOf(station, p.module)) {
+        const change = energy >= 0 ? Math.min(energy, pack.capacity - pack.charge) : -Math.min(-energy, pack.charge);
+        batteries[pack.key] = pack.charge + change;
+        energy -= change;
+      }
     }
-    for (const id of network.moduleIds) powerRunningUpTo[id] = r.runningUpTo;
   }
   return { batteries, powerRunningUpTo };
 }

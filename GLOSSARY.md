@@ -22,6 +22,10 @@ _Avoid_: Docking point, socket, connector
 Two aligned **Ports** joined together. Each has a capacity limit per **Network**.
 _Avoid_: Link, joint, edge
 
+**Bottleneck**:
+A **Connection** that limits what reaches the **Modules** beyond it: with a bigger connection, more would get through.
+_Avoid_: Choke point, jam
+
 **Pressurised**:
 A **Module** that holds air and crew. Only pressurised modules join the air **Network**.
 _Avoid_: Sealed, habitable
