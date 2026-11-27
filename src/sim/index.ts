@@ -2,7 +2,7 @@
 export { createStation } from "./station";
 export { advance } from "./simulation";
 export { powerOf } from "./power";
-export type { PowerReport, ModulePower, NetworkPower, RunningUpTo, ShedReason, ShedTiers } from "./power";
+export type { PowerReport, ModulePower, NetworkPower, RunningUpTo, ShedReason, ShedTiers, JointFlow } from "./power";
 export { lifeSupportOf } from "./lifeSupport";
 export type { LifeSupportReport, ModuleAir, WaterNetwork } from "./lifeSupport";
 export { failureOf } from "./failure";

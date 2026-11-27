@@ -1,7 +1,8 @@
 // Networks (ADR 0003): modules sharing one resource through their connections.
 import { carries, MODULE_TYPES, type Resource } from "./content";
+import type { PlacedPort } from "./geometry";
 import { connectionsOf } from "./placement";
-import { isOffline, offlineCutsNetworks, type ModuleId, type Station } from "./station";
+import { isOffline, offlineCutsNetworks, type ModuleId, type PlacedModule, type Station } from "./station";
 
 export interface Network {
   resource: Resource;
@@ -44,4 +45,30 @@ export function networksOf(station: Station, resource: Resource): Network[] {
     networks.push({ resource, moduleIds: members.filter((m) => group.has(m.id)).map((m) => m.id) });
   }
   return networks;
+}
+
+/** Resources that move through joints with a capacity. Water is pooled without limit (ADR 0003). */
+export type JointResource = "power" | "heat" | "air";
+
+/** One joint inside a network, with what it can carry. */
+export interface Joint {
+  a: ModuleId;
+  b: ModuleId;
+  /** kW for power and heat; m³/s of fan exchange for air. */
+  capacity: number;
+  /** Where it is: the port on module a's side. */
+  port: PlacedPort;
+}
+
+/** The joints between a network's modules, in station order. Each joint is one connection. */
+export function jointsOf(station: Station, network: Network, resource: JointResource): Joint[] {
+  const members = new Set(network.moduleIds);
+  const byId = new Map(station.modules.map((m) => [m.id, m]));
+  return connectionsOf(station).flatMap(({ a, b }) => {
+    if (!members.has(a.moduleId) || !members.has(b.moduleId)) return [];
+    const typeA = MODULE_TYPES[(byId.get(a.moduleId) as PlacedModule).type];
+    const typeB = MODULE_TYPES[(byId.get(b.moduleId) as PlacedModule).type];
+    const capacity = Math.min(typeA.capacity[resource], typeB.capacity[resource]);
+    return [{ a: a.moduleId, b: b.moduleId, capacity, port: a.port }];
+  });
 }

@@ -13,7 +13,7 @@ import {
   type Placement,
   type Station,
 } from "../sim";
-import type { Overlay } from "./overlays";
+import type { JointOverlay, Overlay } from "./overlays";
 import { equipmentColour, palette } from "./palette";
 
 /** Size of one grid cell in screen pixels. */
@@ -67,11 +67,11 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     let tint: number | undefined;
     if (options.removing === module.id) tint = palette.invalid;
     else if (options.selected === module.id) tint = palette.selected;
-    else if (options.overlay) tint = options.overlay[module.id]?.tint;
+    else if (options.overlay) tint = options.overlay.modules[module.id]?.tint;
 
     const body = drawModuleBody(module, tint, options.overlay !== undefined && tint !== undefined && tint !== palette.invalid);
     const status = options.status?.[module.id];
-    if ((options.overlay && !options.overlay[module.id]) || status?.offline) body.alpha = 0.35;
+    if ((options.overlay && !options.overlay.modules[module.id]) || status?.offline) body.alpha = 0.35;
     if (status && (status.offline || status.level !== "ok")) {
       layer.addChild(drawStatusRing(module, status.offline ? palette.offline : status.level === "red" ? palette.danger : palette.warning));
     }
@@ -85,8 +85,9 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
       else layer.addChild(drawEmptyHardpoint(hardpoint, options.showFreeHardpoints === true));
     }
     layer.addChild(drawSlots(module));
-    layer.addChild(drawLabel(module, status?.offline ? { figure: "OFFLINE", figureColour: palette.danger } : options.overlay?.[module.id]));
+    layer.addChild(drawLabel(module, status?.offline ? { figure: "OFFLINE", figureColour: palette.danger } : options.overlay?.modules[module.id]));
   }
+  for (const joint of options.overlay?.joints ?? []) layer.addChild(drawJoint(joint));
   return layer;
 }
 
@@ -225,6 +226,23 @@ function outwardRect(point: PlacedPort, from: number, depth: number, span: numbe
   const f = edgeFrame(point);
   const corner = (o: number, a: number) => [f.x + f.out[0] * o + f.along[0] * a, f.y + f.out[1] * o + f.along[1] * a];
   return [...corner(from, -span / 2), ...corner(from + depth, -span / 2), ...corner(from + depth, span / 2), ...corner(from, span / 2)];
+}
+
+/**
+ * A joint as a bridge across the gap between two modules, filled by how much
+ * of its capacity is in use: dim when quiet, yellow when nearly full, red
+ * and wider when it is the bottleneck.
+ */
+function drawJoint(joint: JointOverlay): Graphics {
+  const gap = MODULE_INSET * 2;
+  const colour = joint.bottleneck ? palette.danger : joint.load >= 0.75 ? palette.warning : palette.label;
+  const span = joint.bottleneck ? 20 : 14;
+  const g = new Graphics();
+  g.poly(outwardRect(joint.port, 0, gap, span)).fill({ color: palette.background }).stroke({ width: 1, color: colour, alpha: 0.8 });
+  // The filled share, from the middle outwards.
+  const filled = span * Math.max(0.08, joint.load);
+  g.poly(outwardRect(joint.port, 1, gap - 2, filled)).fill({ color: colour, alpha: joint.bottleneck ? 1 : 0.85 });
+  return g;
 }
 
 function drawPort(port: PlacedPort, colour: number): Graphics {

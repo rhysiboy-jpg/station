@@ -26,6 +26,11 @@ export interface ModuleType {
   hardpoints: PortDefinition[];
   /** Power the module's own systems draw (lights, fans, avionics), in kW. */
   draw: number;
+  /**
+   * What each of its ports can carry. A joint carries the lower of its two
+   * modules' ratings. Power and heat in kW; air is the fan exchange in m³/s.
+   */
+  capacity: { power: number; heat: number; air: number };
   /** Pressurised volume, in m³. Zero for unpressurised modules. */
   volume: number;
   /** Built-in water tank, in kg. Tanks on one water network are shared. */
@@ -40,6 +45,8 @@ export interface ModuleType {
   heatCapacity: number;
 }
 
+// Port ratings: truss is the power and cooling trunk, corridors are narrow, and
+// the rest sit in between. Fans swap about 0.07 m³/s between ISS modules.
 // Sizes follow the design doc (1x1 node, 1x3 corridor, 2x3 habitat). Ports are
 // listed for rotation 0; a module rotates as a whole in 90 degree steps.
 export const MODULE_TYPES = {
@@ -58,6 +65,7 @@ export const MODULE_TYPES = {
     slots: 1,
     hardpoints: [],
     draw: 0.2,
+    capacity: { power: 12, heat: 8, air: 0.07 },
     volume: 20,
     waterTank: 0,
     beds: 0,
@@ -79,6 +87,7 @@ export const MODULE_TYPES = {
       { x: 0, y: 1, side: "west" },
     ],
     draw: 0.05,
+    capacity: { power: 6, heat: 4, air: 0.1 },
     volume: 30,
     waterTank: 0,
     beds: 0,
@@ -100,6 +109,7 @@ export const MODULE_TYPES = {
       { x: 1, y: 1, side: "east" },
     ],
     draw: 0.6,
+    capacity: { power: 8, heat: 6, air: 0.07 },
     volume: 120,
     waterTank: 5,
     beds: 4,
@@ -121,6 +131,7 @@ export const MODULE_TYPES = {
       { x: 0, y: 1, side: "west" },
     ],
     draw: 0.3,
+    capacity: { power: 8, heat: 6, air: 0.07 },
     volume: 40,
     waterTank: 10,
     beds: 0,
@@ -142,6 +153,7 @@ export const MODULE_TYPES = {
       { x: 1, y: 0, side: "east" },
     ],
     draw: 0.4,
+    capacity: { power: 8, heat: 6, air: 0.07 },
     volume: 75,
     waterTank: 0,
     beds: 0,
@@ -167,6 +179,7 @@ export const MODULE_TYPES = {
       { x: 0, y: 2, side: "west" },
     ],
     draw: 0,
+    capacity: { power: 15, heat: 10, air: 0 },
     volume: 0,
     waterTank: 0,
     beds: 0,
@@ -281,8 +294,6 @@ export const AIR_LIMITS = {
   co2: { yellow: 0.53, red: 1.0 },
 };
 
-/** Air swapped between two joined pressurised modules by fans, in m³ per second (ISS: about 0.07). */
-export const AIR_EXCHANGE_M3_PER_S = 0.07;
 
 /** Comfortable cabin temperature, in °C. Cooling loops pull modules back towards it. */
 export const NOMINAL_TEMPERATURE = 21;

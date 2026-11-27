@@ -2,7 +2,6 @@
 // with its neighbours by fans; water is held in tanks shared across each water
 // network. Equipment only works while power says it is running (ADR 0004).
 import {
-  AIR_EXCHANGE_M3_PER_S,
   CREW,
   EQUIPMENT_TYPES,
   MODULE_TYPES,
@@ -156,7 +155,6 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
 
   // Fans swap a little air across each joint between pressurised modules,
   // all computed from the same snapshot so the order of joints doesn't matter.
-  const exchanged = AIR_EXCHANGE_M3_PER_S * SECONDS_PER_TICK;
   const cut = offlineCutsNetworks(station);
   const deltas = new Map<ModuleId, Air>(pressurised.map((m) => [m.id, { o2: 0, co2: 0 }]));
   const volumes = new Map(pressurised.map((m) => [m.id, volumeOf(m)]));
@@ -165,6 +163,10 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
     const airB = air[b.moduleId];
     if (!airA || !airB) continue;
     if (cut && (isOffline(station, a.moduleId) || isOffline(station, b.moduleId))) continue;
+    // Fans move the slower of the two modules' rates (the joint's air capacity).
+    const ma = station.modules.find((m) => m.id === a.moduleId) as PlacedModule;
+    const mb = station.modules.find((m) => m.id === b.moduleId) as PlacedModule;
+    const exchanged = Math.min(MODULE_TYPES[ma.type].capacity.air, MODULE_TYPES[mb.type].capacity.air) * SECONDS_PER_TICK;
     const va = volumes.get(a.moduleId) as number;
     const vb = volumes.get(b.moduleId) as number;
     for (const gas of ["o2", "co2"] as const) {

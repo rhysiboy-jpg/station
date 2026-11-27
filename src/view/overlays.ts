@@ -8,7 +8,9 @@ import {
   NOMINAL_TEMPERATURE,
   powerOf,
   TEMPERATURE_LIMITS,
+  type JointFlow,
   type ModuleId,
+  type PlacedPort,
   type Station,
 } from "../sim";
 import { palette } from "./palette";
@@ -28,17 +30,39 @@ export interface ModuleOverlay {
   figureColour?: number;
 }
 
-/** Per module; modules not on this overlay's network are absent and drawn dimmed. */
-export type Overlay = Record<ModuleId, ModuleOverlay>;
+/** A joint drawn with how full it is. */
+export interface JointOverlay {
+  port: PlacedPort;
+  /** Share of its capacity in use, 0 to 1. */
+  load: number;
+  bottleneck: boolean;
+}
+
+export interface Overlay {
+  /** Per module; modules not on this overlay's network are absent and drawn dimmed. */
+  modules: Record<ModuleId, ModuleOverlay>;
+  /** Joints, for overlays whose resource moves through them with a capacity. */
+  joints: JointOverlay[];
+}
+
+const jointsFrom = (joints: JointFlow[]): JointOverlay[] =>
+  joints.map((j) => ({
+    port: j.port,
+    load: j.capacity > 0 ? Math.min(1, Math.abs(j.flow) / j.capacity) : 0,
+    bottleneck: j.bottleneck,
+  }));
 
 type Level = "ok" | "yellow" | "red";
 const levelTint = (level: Level, ok: number) => (level === "red" ? palette.danger : level === "yellow" ? palette.warning : ok);
 
 export function overlayFor(kind: OverlayKind, station: Station): Overlay {
-  const overlay: Overlay = {};
+  const overlay: Record<ModuleId, ModuleOverlay> = {};
+  let joints: JointOverlay[] = [];
   switch (kind) {
     case "power": {
-      for (const [id, p] of Object.entries(powerOf(station).modules)) {
+      const power = powerOf(station);
+      joints = jointsFrom(power.joints);
+      for (const [id, p] of Object.entries(power.modules)) {
         const net = p.production - p.draw;
         overlay[Number(id)] = {
           tint: !p.powered ? palette.unpowered : p.draw < p.demand ? palette.shedding : palette.power,
@@ -49,7 +73,9 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
       break;
     }
     case "heat": {
-      for (const [id, h] of Object.entries(heatOf(station).modules)) {
+      const heat = heatOf(station);
+      joints = jointsFrom(heat.joints);
+      for (const [id, h] of Object.entries(heat.modules)) {
         const level: Level =
           h.temperature >= TEMPERATURE_LIMITS.red ? "red" : h.temperature >= TEMPERATURE_LIMITS.yellow ? "yellow" : "ok";
         overlay[Number(id)] = {
@@ -99,5 +125,5 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
       break;
     }
   }
-  return overlay;
+  return { modules: overlay, joints };
 }
