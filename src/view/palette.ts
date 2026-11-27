@@ -23,6 +23,7 @@ export const palette = {
   heat: 0xff8a5c,
   air: 0x5fe3a1,
   water: 0x5fb8ff,
+  data: 0xc39bff,
   // Warning levels, shared by every overlay.
   warning: 0xffe14d,
   danger: 0xff4d4d,

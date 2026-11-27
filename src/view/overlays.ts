@@ -2,6 +2,7 @@
 // tint and a short figure per module. Reads state only.
 import {
   AIR_LIMITS,
+  dataOf,
   heatOf,
   lifeSupportOf,
   MODULE_TYPES,
@@ -15,13 +16,14 @@ import {
 } from "../sim";
 import { palette } from "./palette";
 
-export type OverlayKind = "power" | "heat" | "air" | "water";
+export type OverlayKind = "power" | "heat" | "air" | "water" | "data";
 
 export const OVERLAYS: { kind: OverlayKind; name: string; key: string }[] = [
   { kind: "power", name: "Power", key: "p" },
   { kind: "heat", name: "Heat", key: "h" },
   { kind: "air", name: "Air", key: "o" },
   { kind: "water", name: "Water", key: "u" },
+  { kind: "data", name: "Data", key: "t" },
 ];
 
 export interface ModuleOverlay {
@@ -121,6 +123,22 @@ export function overlayFor(kind: OverlayKind, station: Station): Overlay {
             figureColour: levelTint(level, palette.label),
           };
         });
+      }
+      break;
+    }
+    case "data": {
+      // Every module carries data; show what each makes, holds or sends.
+      for (const [id, d] of Object.entries(dataOf(station).modules)) {
+        const parts: string[] = [];
+        if (d.produced > 0) parts.push(`+${d.produced.toFixed(0)} GB/h`);
+        if (d.capacity > 0) parts.push(`${d.stored.toFixed(0)}/${d.capacity} GB`);
+        if (d.downlink > 0) parts.push(`↓${d.downlink.toFixed(0)} GB/h`);
+        const full = d.capacity > 0 && d.stored >= d.capacity * 0.95;
+        overlay[Number(id)] = {
+          tint: d.racksUntended > 0 || full ? palette.warning : palette.data,
+          figure: parts.length > 0 ? parts.join(" ") : undefined,
+          figureColour: full ? palette.warning : palette.label,
+        };
       }
       break;
     }

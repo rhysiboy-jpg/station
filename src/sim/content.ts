@@ -227,6 +227,12 @@ export interface EquipmentType {
   waterPerDay?: number;
   /** Radiator: heat it can reject, in kW. */
   rejects?: number;
+  /** Lab rack: data it makes while powered and tended, in GB per hour. */
+  dataPerHour?: number;
+  /** Antenna: data it can send to Earth while powered, in GB per hour. */
+  downlinkPerHour?: number;
+  /** Data storage: GB it holds. */
+  dataStorage?: number;
 }
 
 // Power figures are first estimates to balance from (design doc: start from
@@ -239,7 +245,8 @@ export const EQUIPMENT_TYPES = {
   // Coolant pumps.
   // Far smaller than an ISS radiator wing (about 14 kW), to suit the prototype's scale.
   radiator: { name: "Radiator", short: "RAD", mount: "external", draw: 0.2, priority: 3, rejects: 3 },
-  antenna: { name: "Antenna", short: "ANT", mount: "external", draw: 0.15, priority: 4 },
+  // Data rates are stylised round numbers (see balance changes): one antenna keeps up with three racks.
+  antenna: { name: "Antenna", short: "ANT", mount: "external", draw: 0.15, priority: 4, downlinkPerHour: 3 },
   // A lithium-ion battery pack, roughly the size of one ISS battery unit.
   battery: { name: "Battery", short: "BAT", mount: "internal", draw: 0, priority: 1, storage: 5 },
   // Enough for 4 crew: 4 x 0.84 kg O2 and 4 x 1 kg CO2 a day, with some headroom.
@@ -262,8 +269,8 @@ export const EQUIPMENT_TYPES = {
     recovery: 0.9,
     waterPerDay: 12,
   },
-  "lab-rack": { name: "Lab rack", short: "LAB", mount: "internal", draw: 1, priority: 4 },
-  "data-storage": { name: "Data storage", short: "DATA", mount: "internal", draw: 0.05, priority: 4 },
+  "lab-rack": { name: "Lab rack", short: "LAB", mount: "internal", draw: 1, priority: 4, dataPerHour: 1 },
+  "data-storage": { name: "Data storage", short: "DATA", mount: "internal", draw: 0.05, priority: 4, dataStorage: 20 },
 } as const satisfies Record<string, EquipmentType>;
 
 export type EquipmentTypeId = keyof typeof EQUIPMENT_TYPES;
@@ -324,3 +331,6 @@ export const DIFFICULTIES: Record<Difficulty, { name: string; offlineCutsNetwork
   /** An offline module cuts every network it sits on, splitting the station. */
   hard: { name: "Hard", offlineCutsNetworks: true },
 };
+
+/** Lab racks one crew member can tend. Untended racks idle. */
+export const RACKS_PER_CREW = 2;

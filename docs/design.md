@@ -39,7 +39,11 @@ Modules joined by ports form one shared **network** per resource. Each **connect
 | Water | Water recycler, resupply | Crew, oxygen generation | Recycling below 100% |
 | Data | Lab racks | Sent to Earth by antennas | Stored on board until downlinked; in the full game, ground contact is only part of each orbit |
 
-Only **pressurised** modules join the air network. Unlike the other resources, air isn't one shared pool: each pressurised module has its own O2 and CO2, and fans slowly mix it with attached modules, so a crowded habitat far from the scrubber goes bad first ([ADR 0005](adr/0005-per-module-air.md)). Water is pooled per network in tanks built into some modules.
+Only **pressurised** modules join the air network. Unlike the other resources, air isn't one shared pool: each pressurised module has its own O2 and CO2, and fans slowly mix it with attached modules, so a crowded habitat far from the scrubber goes bad first ([ADR 0005](adr/0005-per-module-air.md)). Water is pooled per network in tanks built into some modules. Later resources, in rough order: fuel (reboosts in low orbit), food, spare parts, radiation.
+
+### Data
+
+Lab racks make data only while powered and tended: each crew member tends two racks, so a full four-rack lab needs two crew. Data storage holds it and antennas send it to Earth, both needing power. Whatever has nowhere to go is lost and counted. Data has no limit at joints, like water. Ground contact is constant in the prototype; contact windows for part of each orbit come with the full game.
 
 ### Bottlenecks
 
@@ -47,7 +51,7 @@ Each **connection** carries only so much: the lower of its two modules' port rat
 
 ### Power shortages
 
-When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them. Later resources, in rough order: fuel (reboosts in low orbit), food, spare parts, radiation.
+When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them.
 
 ### Reference figures (starting points, to be tuned)
 
@@ -66,6 +70,7 @@ Every place the game departs from the reference figures, and why.
 - **Small water tanks.** Habitats hold 5 kg of water and life support modules 10 kg, a few bottles' worth. At real rates (about 3 kg per person per day, roughly 16 orbits a day) realistic tanks would only run dry after hundreds of orbits. With small tanks, 4 crew with no recycler run dry in about 20 orbits, so recycling matters within a sitting. _Provisional: see whether this feels right in play._
 - **Low thermal mass.** Modules take about 300 kJ to warm by 1 °C per grid cell, far less than a real module's ~10 MJ/°C. This is so 1 kW of unshed heat reaches the yellow limit in about an orbit rather than a day.
 - **Small radiators.** A radiator rejects 3 kW, against about 14 kW for an ISS radiator wing, to keep numbers at the prototype's scale.
+- **Stylised data rates.** A lab rack makes 1 GB an hour, an antenna sends 3 GB an hour and data storage holds 20 GB. These are round numbers chosen so one antenna keeps up with three racks and a full lab fills storage in about five hours; real ISS science data volumes are far larger and vary wildly by experiment.
 - **Crew rates are real**: 0.84 kg O2 used, 1 kg CO2 made and 3 kg water used per person per day, plus 100 W of body heat. CO2 builds to the yellow limit within a few orbits without a scrubber, as on the real ISS, where CO2 is the fast danger.
 
 ## Crew
