@@ -58,7 +58,10 @@ function play(station: Station, id: ChallengeId, settleOrbits = 0) {
 // south of the core (it blocks truss hardpoint 2); lab (4) north of the core.
 const core = [slot(1, 0, "battery"), place("truss", 1, 0, 90), place("habitat", 0, 1), place("lab", -1, -2)];
 
-describe("every challenge is winnable", () => {
+/** Each test plays a whole challenge (thousands of ticks); CI machines can be several times slower. */
+const WHOLE_GAME = { timeout: 60_000 };
+
+describe("every challenge is winnable", WHOLE_GAME, () => {
   it("covers all of them", () => {
     expect(CHALLENGES.map((c) => c.id).sort()).toEqual(
       ["cool-running", "long-haul", "night-shift", "science-return", "shakedown", "station-keeping"].sort(),
@@ -226,5 +229,5 @@ describe("every challenge is winnable", () => {
     const result = play(station, "station-keeping", 3);
     expect(result?.failedBecause ?? null).toBeNull();
     expect(result).toMatchObject({ outcome: "won" });
-  }, 60_000);
+  });
 });
