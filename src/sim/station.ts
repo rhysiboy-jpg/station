@@ -44,10 +44,12 @@ export interface Station {
   /** Charge in each battery, in kWh, keyed by module and slot. */
   batteries: Record<string, number>;
   /**
-   * The load-shedding tier each module's power network ran at last tick
-   * (ADR 0004). Missing means nothing has been shed.
+   * How many of each module's loads ran last tick, in run order (systems, then
+   * equipment by tier). Shedding drops loads from the end; restarting beyond
+   * this needs sunlight alone or full batteries (ADR 0004). Missing means
+   * nothing has been shed.
    */
-  powerRunningUpTo: Record<ModuleId, number>;
+  powerLoadsRunning: Record<ModuleId, number>;
   // Running state keyed by module, like batteries, so undoing a build change
   // doesn't rewind time. A module with no entry is fresh: fresh air, full
   // tank, at the set point.
@@ -85,7 +87,7 @@ export function createStation(): Station {
     modules: [newModule(1, { type: "core-node", position: { x: 0, y: 0 }, rotation: 0 })],
     nextModuleId: 2,
     batteries: {},
-    powerRunningUpTo: {},
+    powerLoadsRunning: {},
     air: {},
     water: {},
     temperature: {},

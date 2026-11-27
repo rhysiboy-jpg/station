@@ -71,10 +71,12 @@ describe("power through a bottleneck", () => {
 
   it("leaves the far side short even when the network has power to spare", () => {
     // 10.8 kW of sun against 7.05 kW of demand, but the corridor carries only 6.
+    // Racks are shed one at a time until what's left fits.
     const power = powerOf(behindCorridor());
 
     expect(power.production).toBeGreaterThan(power.demand);
-    expect(power.modules[4]?.running.slots).toEqual([false, false, false, false]);
+    // Tiers 1 to 3 behind the corridor take 3 kW; the rest of its 6 kW runs two racks.
+    expect(power.modules[4]?.running.slots).toEqual([true, true, false, false]);
     expect(power.modules[6]?.running.slots[0]).toBe(true);
     expect(power.modules[4]?.shed[4]).toEqual({ kind: "bottleneck" });
   });

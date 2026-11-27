@@ -18,7 +18,7 @@ Can a new player work out the basics from the screen alone?
 - [ ] Within 2 minutes, did they place a **Module**? Did the green or red preview make sense?
 - [ ] Did they find **R** to rotate, and work out why a module wouldn't connect (its **Ports** must line up)?
 - [ ] Did they fit internal **Equipment** in a **Slot** and external equipment on a **Hardpoint**? Was "point at the empty cell beside one" clear?
-- [ ] Did they notice the red "No power" alert on the core node? Did it help or confuse them? _(open question 6)_
+- [ ] Did they notice the red "No power" alert on the core node? Did it help or confuse them? _(kept on purpose: check it helps)_
 - [ ] Did they find the inspector by clicking a module, and the crew **+** button?
 - [ ] Did they find the overlay keys (**P H O U T**) unprompted?
 
@@ -42,7 +42,7 @@ While playing each one, watch for:
 - [ ] **Night shift:** did the battery floors (labs stop at 50%) come across as a rule you could plan around, or as a surprise? Did the battery bar's floor marks and the "Off: battery below 50%" reason get noticed?
 - [ ] **Cool running:** did heat build-up feel like a problem you could see coming? Was it a puzzle (where to put radiators, which connections carry heat) or just "add radiators"?
 - [ ] **Science return:** did crew tending (2 racks per crew member) and antenna rate shape the layout, or was data an afterthought?
-- [ ] **Long haul:** did water ever run short? With 5 and 10 kg tanks, did recycling matter? _(balance, open question 4)_
+- [ ] **Long haul:** did water ever run short? With 5 and 10 kg tanks, did recycling matter? _(balance)_
 - [ ] **Station keeping:** was it winnable? How long did the build take, and was the build itself the fun part or a chore?
 
 Notes:
@@ -56,7 +56,7 @@ Start a **New station** in free play and build something ambitious: 6 or more cr
 - [ ] **Bottlenecks.** Did a narrow connection (a corridor, 6 kW of power and 4 kW of heat) ever limit you? Did the red connection in the power or heat overlay show you where, and did you understand the fix?
 - [ ] **Heat leakage.** Did a hot module next to a habitat ever matter?
 - [ ] **Air per module.** Did crew far from the scrubber get worse air than those near it? Did that change where you put people?
-- [ ] **Load shedding.** When power ran short, did the right things stop (science first, life support last)? Did the "why it's off" reasons make sense? Did whole tiers stopping per module ever feel wrong, for example all four lab racks off when two would fit? _(open question 5)_
+- [ ] **Load shedding.** When power ran short, did the right things stop (science first, life support last)? Did the "why it's off" reasons make sense? Equipment is now shed one item at a time: did what stopped, and in what order, make sense?
 - [ ] **Failure.** Did a module go **Offline** at least once? Did the countdown give you time to react? Did crew moving out make sense? Did it recover the way you expected?
 - [ ] **Difficulty.** Try one failure on **Hard**, where an offline module cuts its **Networks**. More interesting, or just harsher?
 
@@ -72,7 +72,7 @@ Notes:
 
 ## 4. Readability
 
-- [ ] Could you tell every network apart by colour (power cyan, heat orange, air mint, water blue, data violet)? Was cyan for power fine, or did you miss gold? _(open question 3)_
+- [ ] Could you tell every network apart by colour (power cyan, heat orange, air mint, water blue, data violet)? Power is cyan so that yellow means warnings only: did that read well?
 - [ ] Did yellow and red always read as warnings, and never get confused with a network?
 - [ ] Was the alerts list useful, or noise?
 - [ ] Was any text in the panels hard to read, too small, or wrapped badly?
@@ -82,10 +82,10 @@ Notes:
 
 ## 5. Pace and strictness
 
-- [ ] Heat: about 1 °C per orbit for each kW of unshed heat. Too fast, too slow, or right? _(open question 4)_
-- [ ] Challenges: a hold can slip for a quarter orbit (about 30 s at 1x) before failing, and a result pauses the game. Too strict or too loose? _(open question 2)_
-- [ ] Starting a challenge on your current station, with building allowed during it: did that feel like cheating, or fine? Would you rather start fresh? _(open question 1)_
-- [ ] Connection capacities and data rates: anything that felt arbitrary or never mattered? _(open question 4)_
+- [ ] Heat: about 1 °C per orbit for each kW of unshed heat. Too fast, too slow, or right? _(balance)_
+- [ ] Challenges: a hold can slip for a quarter orbit (about 30 s at 1x) before failing, so it must last the night; a result pauses the game. Did that feel fair?
+- [ ] Challenges start from your station with building locked until they end (crew can still move). Did the lock feel right, or did you want to fix things mid-challenge?
+- [ ] Connection capacities and data rates: anything that felt arbitrary or never mattered? _(balance)_
 
 Notes:
 
@@ -109,6 +109,6 @@ Notes:
 
 - [ ] Answer the judgement: **is the layout puzzle fun?** Yes, no, or "yes if...". One paragraph.
 - [ ] Update the balance changes list in [design.md](design.md) with every number that should change, and why.
-- [ ] Settle the open questions above, and record any that are hard to reverse as ADRs.
+- [ ] Settle anything the session raised, and record what's hard to reverse as ADRs. Balance numbers were left for this playtest on purpose.
 - [ ] File bugs as GitHub issues.
 - [ ] Decide what comes next: tuning the sandbox, designing the campaign, or revisiting Godot ([ADR 0001](adr/0001-typescript-sim-core-separate-from-rendering.md)).

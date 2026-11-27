@@ -201,6 +201,20 @@ html, body {
 
 .build { max-height: calc(100vh - 32px); overflow-y: auto; }
 
+/* While a challenge runs, the design is locked; crew controls in the inspector stay live. */
+.challenge-locked #modules,
+.challenge-locked #equipment,
+.challenge-locked #remove,
+.challenge-locked #rotate,
+.challenge-locked #undo,
+.challenge-locked #difficulty,
+.challenge-locked #new-station,
+.challenge-locked #import-station,
+.challenge-locked .inspector [data-unfit] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 .challenge p { margin: 0; font-size: 11px; line-height: 1.45; }
 .challenge .progress {
   position: relative;

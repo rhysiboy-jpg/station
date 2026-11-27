@@ -51,7 +51,7 @@ Each **connection** carries only so much: the lower of its two modules' port rat
 
 ### Power shortages
 
-When a power network can't meet demand, equipment is **shed** in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them.
+When a power network can't meet demand, equipment is **shed**, one item at a time, in priority tiers, like an ISS load-shed list ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)): science and comms go first, then cooling, then water, and the oxygen generator and the modules' own systems last. Each tier may run batteries down only to its own floor (50%, 30%, 15%, empty), so life support outlasts the labs through **eclipse**. Shed equipment restarts once sunlight alone covers it or the batteries are full. Priorities and floors are data; player-set priorities may follow if playtests ask for them.
 
 ### Reference figures (starting points, to be tuned)
 
@@ -109,7 +109,7 @@ The first milestone is a sandbox that answers one question: is the layout puzzle
 - **Modules (6):** core node (ports on all four sides), habitat, life support module, lab, truss segment, corridor.
 - **Equipment (8):** solar panel, radiator, battery, oxygen generator / CO2 scrubber, water recycler, lab rack, antenna, data storage.
 - Day and night, heat, failures and warnings. Constant ground contact (contact windows come later).
-- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits". Built as six: Shakedown, Night shift, Cool running, Science return, Long haul and Station keeping. A challenge starts from the station as it stands. Its **holds** (crew aboard, lab racks working, every module below a temperature) must stay true for its length, with a quarter-orbit grace for lapses; its **goals** (data sent to Earth) must be met before time runs out. Abandoning the station fails it.
+- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits". Built as six: Shakedown, Night shift, Cool running, Science return, Long haul and Station keeping. A challenge starts from the station as it stands, and the design is locked until it ends: no placing, removing, fitting, undo or difficulty changes, though crew can still be moved. Its **holds** (crew aboard, lab racks working, every module below a temperature) must stay true for its length, with a quarter-orbit grace for lapses, kept shorter than eclipse so holds must last the night; its **goals** (data sent to Earth) must be met before time runs out. Abandoning the station fails it, and a result pauses the game. Every challenge is proven winnable by a test (`src/sim/winnable.test.ts`).
 - Screen: build palette, overlay toggles for each network, module inspector, time controls, alerts list, day/night and contact indicator.
 - Autosaves in the browser, with export and import of save files to share layouts. Saves are versioned JSON checked in full on load, so a broken or hand-edited file is refused with a message. Undo history isn't saved.
 - Published to GitHub Pages on each update.
@@ -117,6 +117,17 @@ The first milestone is a sandbox that answers one question: is the layout puzzle
 ## Look
 
 A clean schematic or blueprint style: flat shapes, clear colour coding per network, readable overlays. Simple, but attractive. Prettier art once the game is proven.
+
+## Decided after the prototype was built
+
+Settled on 2026-11-27, before the first playtest:
+
+- **Challenges** start from your station as it stands; building locks until the challenge ends, crew stay movable; a quarter orbit of grace, shorter than eclipse (a half orbit was tried and let Night shift be won with no batteries).
+- **Power stays cyan**, so yellow and red mean warnings only.
+- **Shedding is item by item** within a tier ([ADR 0004](adr/0004-power-shortages-shed-by-priority.md)).
+- **A new station's red "No power" alert stays**, as a prompt to build power first.
+- **Balance numbers** (tank sizes, heat speed, connection capacities, data rates) are tuned after the playtest, not before; [the checklist](playtest.md) asks about each.
+- **Next:** playtest, then update this document before designing the campaign or revisiting Godot.
 
 ## Deferred
 

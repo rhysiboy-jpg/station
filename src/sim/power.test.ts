@@ -136,8 +136,9 @@ describe("load shedding (ADR 0004)", () => {
   const labsRunning = (s: Station) => powerOf(s).modules[4]?.running.slots.every(Boolean) ?? false;
 
   it("stops the lowest priority equipment first and keeps life support running", () => {
-    // Demand 8.2 kW against 5.4 kW of sun. Each module runs as many tiers as fit,
-    // so the life support module's one lab rack fits but the lab's four don't.
+    // Demand 8.2 kW against 5.4 kW of sun. Tiers 1 to 3 take 3.2 kW; the 2.2 kW
+    // left runs lab racks one at a time, in slot order: the life support
+    // module's rack, then one of the lab's four.
     const station = run(
       createStation(),
       truss,
@@ -153,11 +154,11 @@ describe("load shedding (ADR 0004)", () => {
 
     expect(power.demand).toBeCloseTo(8.2);
     expect(power.modules[3]?.running.slots).toEqual([true, true, true]);
-    expect(power.modules[4]?.running.slots).toEqual([false, false, false, false]);
+    expect(power.modules[4]?.running.slots).toEqual([true, false, false, false]);
     expect(power.modules[4]?.powered).toBe(true);
     expect(power.powered).toBe(true);
     expect(power.supplied).toBe(false);
-    expect(power.draw).toBeCloseTo(4.2);
+    expect(power.draw).toBeCloseTo(5.2);
   });
 
   // 5.4 kW of sun. Life support module (3) with a water recycler, a radiator
@@ -171,7 +172,8 @@ describe("load shedding (ADR 0004)", () => {
   const labsShedWithCharge = (kwh: number): Station => ({
     ...sheddingWithBattery(),
     batteries: { "1:0": kwh },
-    powerRunningUpTo: { 1: 4, 2: 4, 3: 4, 4: 3 },
+    // Every module ran all its loads last tick except the lab, which ran only its own systems.
+    powerLoadsRunning: { 1: 99, 2: 99, 3: 99, 4: 1 },
   });
   /** Start of eclipse with a full battery and nothing shed yet. */
   const eclipseOnFullBattery = (): Station => ({ ...sheddingWithBattery(), tick: 720, batteries: { "1:0": 5 } });
@@ -181,6 +183,14 @@ describe("load shedding (ADR 0004)", () => {
 
     expect(labsRunning(station)).toBe(false);
     expect(powerOf(station).stored).toBeGreaterThan(0);
+  });
+
+  it("restarts shed equipment item by item: what sunlight covers at once, the rest on a full battery", () => {
+    // 3.5 kW of spare sunlight restarts three 1 kW racks straight away; the fourth waits.
+    const power = powerOf(labsShedWithCharge(4.9));
+
+    expect(power.modules[4]?.running.slots).toEqual([true, true, true, false]);
+    expect(power.modules[4]?.shed[4]).toEqual({ kind: "waiting-for-full-battery" });
   });
 
   it("restarts shed equipment once the batteries are full", () => {

@@ -27,7 +27,7 @@ export function renderChallenge(station: Station, actions: ChallengeActions): vo
       ).join("")}</select></label>`,
     );
     html.push(`<p>${chosen.brief}</p>`);
-    html.push(`<p class="muted">It starts from your station as it is now. A condition that must hold can slip for up to ${seconds(CHALLENGE_LAPSE_TICKS)} at 1× before it fails.</p>`);
+    html.push(`<p class="muted">It starts from your station as it is now, and building is locked until it ends (you can still move crew). A condition that must hold can slip for up to ${seconds(CHALLENGE_LAPSE_TICKS)} at 1× before it fails.</p>`);
     html.push(`<button type="button" data-start${station.abandoned ? " disabled" : ""}>Start challenge</button>`);
   } else {
     const { challenge, outcome } = progress;

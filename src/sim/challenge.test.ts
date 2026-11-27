@@ -6,7 +6,7 @@ import {
   challengeOf,
   createStation,
   loadStation,
-  OFFLINE_AFTER_TICKS,
+  CHALLENGE_LAPSE_TICKS,
   saveStation,
   TICKS_PER_ORBIT,
   type ChallengeId,
@@ -64,14 +64,14 @@ describe("a challenge", () => {
   });
 
   it("tolerates a brief lapse", () => {
-    const lapsing = advance(run(twoCrew(), start("shakedown"), crew(2, 0)), OFFLINE_AFTER_TICKS - 10);
+    const lapsing = advance(run(twoCrew(), start("shakedown"), crew(2, 0)), CHALLENGE_LAPSE_TICKS - 10);
     const back = advance(run(lapsing, crew(2, 2)), TICKS_PER_ORBIT * 3);
 
     expect(challengeOf(back)?.outcome).toBe("won");
   });
 
   it("fails when a hold lapses for more than a quarter orbit, and says which", () => {
-    const station = advance(run(twoCrew(), start("shakedown"), crew(2, 0)), OFFLINE_AFTER_TICKS + 1);
+    const station = advance(run(twoCrew(), start("shakedown"), crew(2, 0)), CHALLENGE_LAPSE_TICKS + 1);
     const progress = challengeOf(station);
 
     expect(progress?.outcome).toBe("failed");
@@ -105,7 +105,7 @@ describe("a challenge", () => {
 
   it("stops counting once it's over", () => {
     const won = advance(run(twoCrew(), start("shakedown")), TICKS_PER_ORBIT * 3 + 1);
-    const later = advance(run(won, crew(2, 0)), OFFLINE_AFTER_TICKS * 2);
+    const later = advance(run(won, crew(2, 0)), CHALLENGE_LAPSE_TICKS * 2);
 
     expect(challengeOf(later)?.outcome).toBe("won");
   });
@@ -119,6 +119,47 @@ describe("a challenge", () => {
     const loaded = loadStation(saveStation(midway));
 
     expect(loaded.ok && challengeOf(loaded.station)).toEqual(challengeOf(midway));
+  });
+});
+
+describe("while a challenge runs", () => {
+  const habitat2: Command = { type: "place", module: "habitat", position: { x: -1, y: -3 }, rotation: 180 };
+
+  it("gives holds a quarter orbit of grace, shorter than eclipse", () => {
+    expect(CHALLENGE_LAPSE_TICKS).toBe(TICKS_PER_ORBIT / 4);
+    // A hold must not be able to lapse for the whole eclipse (40% of an orbit).
+    expect(CHALLENGE_LAPSE_TICKS).toBeLessThan(TICKS_PER_ORBIT * 0.4);
+  });
+
+  it("locks building: no placing, removing, fitting, unfitting, undo or difficulty changes", () => {
+    const running = run(twoCrew(), start("shakedown"));
+    const locked = [
+      habitat2,
+      { type: "remove", moduleId: 2 } as Command,
+      slot(1, 0, "battery"),
+      { type: "unfit", moduleId: 1, mount: { kind: "slot", index: 0 } } as Command,
+      { type: "undo" } as Command,
+      { type: "difficulty", difficulty: "hard" } as Command,
+    ];
+    for (const command of locked) {
+      expect(applyCommand(running, command)).toMatchObject({ ok: false, reason: "challenge-running" });
+    }
+  });
+
+  it("still lets you move crew", () => {
+    const running = run(twoCrew(), start("shakedown"));
+
+    expect(applyCommand(running, crew(1, 1)).ok).toBe(true);
+    expect(applyCommand(running, crew(2, 1)).ok).toBe(true);
+  });
+
+  it("unlocks building once it is won, failed or given up", () => {
+    const given = run(twoCrew(), start("shakedown"), start(null));
+    const won = advance(run(twoCrew(), start("shakedown")), TICKS_PER_ORBIT * 3 + 1);
+
+    expect(applyCommand(given, habitat2).ok).toBe(true);
+    expect(challengeOf(won)?.outcome).toBe("won");
+    expect(applyCommand(won, habitat2).ok).toBe(true);
   });
 });
 
