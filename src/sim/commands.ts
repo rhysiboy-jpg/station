@@ -38,6 +38,7 @@ export type RejectionReason =
   | "bad-headcount"
   | "offline"
   | "no-room"
+  | "challenge-running"
   | "abandoned"
   | MountRejection;
 
@@ -51,7 +52,17 @@ export type CommandResult =
   | { ok: false; reason: RejectionReason; message: string };
 
 /** Applies a player command. Returns the new station, or why the command was rejected. Never mutates. */
+/** Commands that change the design, locked while a challenge runs. Crew and the challenge itself stay free. */
+const BUILD_COMMANDS: ReadonlySet<Command["type"]> = new Set(["place", "remove", "fit", "unfit", "undo", "difficulty"]);
+
 export function applyCommand(station: Station, command: Command): CommandResult {
+  if (station.challenge?.outcome === "running" && BUILD_COMMANDS.has(command.type)) {
+    return {
+      ok: false,
+      reason: "challenge-running",
+      message: "Building is locked while a challenge runs. You can still move crew, or give up the challenge to build.",
+    };
+  }
   switch (command.type) {
     case "place":
       return place(station, command);

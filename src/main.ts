@@ -308,6 +308,12 @@ async function start(): Promise<void> {
       quit: () => run({ type: "challenge", challenge: null }),
     });
     banners.update(station);
+    // Building is locked while a challenge runs: grey out the controls and drop any build tool.
+    const locked = station.challenge?.outcome === "running";
+    if (document.body.classList.contains("challenge-locked") !== locked) {
+      document.body.classList.toggle("challenge-locked", locked);
+      if (locked && tool) setTool(null);
+    }
     renderInspector(station, moduleById(selectedId), {
       unfit: (moduleId, mount) => run({ type: "unfit", moduleId, mount }),
       changeCrew: (moduleId, delta) =>

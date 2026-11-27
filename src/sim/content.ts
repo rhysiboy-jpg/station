@@ -432,5 +432,5 @@ export const CHALLENGES = [
 
 export type ChallengeId = (typeof CHALLENGES)[number]["id"];
 
-/** A hold may lapse this long before the challenge fails: the same quarter orbit a red module gets. */
-export const CHALLENGE_LAPSE_TICKS = OFFLINE_AFTER_TICKS;
+/** A hold may lapse this long before the challenge fails: half an orbit, about 60 s at 1x. */
+export const CHALLENGE_LAPSE_TICKS = 600;
