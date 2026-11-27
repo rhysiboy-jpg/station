@@ -110,7 +110,7 @@ The first milestone is a sandbox that answers one question: is the layout puzzle
 - Day and night, heat, failures and warnings. Constant ground contact (contact windows come later).
 - A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits".
 - Screen: build palette, overlay toggles for each network, module inspector, time controls, alerts list, day/night and contact indicator.
-- Autosaves in the browser, with export and import of save files to share layouts.
+- Autosaves in the browser, with export and import of save files to share layouts. Saves are versioned JSON checked in full on load, so a broken or hand-edited file is refused with a message. Undo history isn't saved.
 - Published to GitHub Pages on each update.
 
 ## Look

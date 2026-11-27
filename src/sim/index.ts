@@ -7,6 +7,8 @@ export { lifeSupportOf } from "./lifeSupport";
 export type { LifeSupportReport, ModuleAir, WaterNetwork } from "./lifeSupport";
 export { dataOf } from "./data";
 export type { DataReport, ModuleData, DataNetwork } from "./data";
+export { saveStation, loadStation, SAVE_VERSION } from "./save";
+export type { LoadResult } from "./save";
 export { failureOf } from "./failure";
 export type { FailureReport, ModuleStatus, Warning, Condition, Level } from "./failure";
 export { heatOf } from "./heat";
