@@ -1,4 +1,5 @@
-import { MODULE_TYPES, type Difficulty, type EquipmentTypeId, type ModuleTypeId } from "./content";
+import { startChallenge } from "./challenge";
+import { MODULE_TYPES, type ChallengeId, type Difficulty, type EquipmentTypeId, type ModuleTypeId } from "./content";
 import {
   clearBlockedHardpoints,
   fitEquipment,
@@ -20,6 +21,8 @@ export type Command =
   | { type: "crew"; moduleId: ModuleId; headcount: number }
   /** A station setting, not a build change: it isn't undone by undo. */
   | { type: "difficulty"; difficulty: Difficulty }
+  /** Start a challenge on the station as it stands, or null to return to free play. Not undone by undo. */
+  | { type: "challenge"; challenge: ChallengeId | null }
   | { type: "undo" };
 
 export type RejectionReason =
@@ -34,6 +37,7 @@ export type RejectionReason =
   | "unpressurised"
   | "bad-headcount"
   | "offline"
+  | "abandoned"
   | MountRejection;
 
 export type CommandResult =
@@ -57,6 +61,15 @@ export function applyCommand(station: Station, command: Command): CommandResult 
       return changeEquipment(station, command);
     case "crew":
       return assignCrew(station, command);
+    case "challenge":
+      if (command.challenge !== null && station.abandoned) {
+        return { ok: false, reason: "abandoned", message: "This station has been abandoned. Start a new one first." };
+      }
+      return {
+        ok: true,
+        station: { ...station, challenge: command.challenge === null ? null : startChallenge(station, command.challenge) },
+        displaced: [],
+      };
     case "difficulty":
       return { ok: true, station: { ...station, difficulty: command.difficulty }, displaced: [] };
     case "undo":

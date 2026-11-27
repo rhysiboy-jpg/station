@@ -4,6 +4,7 @@ import {
   applyCommand,
   checkPlacement,
   createStation,
+  challengeOf,
   EQUIPMENT_TYPES,
   failureOf,
   footprintOf,
@@ -23,6 +24,7 @@ import {
   type Rotation,
   type Station,
 } from "./sim";
+import { renderChallenge } from "./ui/challengePanel";
 import { renderAlerts, renderInspector, renderStatus } from "./ui/hud";
 import { exportStation, importStation, readAutosave, writeAutosave } from "./ui/saves";
 import {
@@ -107,6 +109,9 @@ function newStation(askFirst: boolean): void {
 /** Swaps in a different station (new, loaded or imported) and resets the view around it. */
 function replaceStation(next: Station): void {
   station = next;
+  // A challenge already over in a loaded station has had its moment.
+  const run = next.challenge;
+  resultShownFor = run && run.outcome !== "running" ? `${run.id}@${run.startTick}` : null;
   selectedId = null;
   abandonedSeen = false;
   setTool(null);
@@ -150,6 +155,33 @@ function showAbandoned(): void {
     }
   }
   banner.hidden = !show;
+}
+
+/** The finished challenge whose result banner was last shown, so it shows once. */
+let resultShownFor: string | null = null;
+
+/** Announce a won or failed challenge once, and pause so the player sees it. */
+function showChallengeResult(): void {
+  const banner = document.getElementById("challenge-result");
+  const run = station.challenge;
+  if (!banner) return;
+  const key = run && run.outcome !== "running" ? `${run.id}@${run.startTick}` : null;
+  if (key && key !== resultShownFor && !station.abandoned) {
+    resultShownFor = key;
+    const progress = challengeOf(station);
+    const won = run?.outcome === "won";
+    banner.classList.toggle("won", won);
+    const title = document.getElementById("challenge-result-title");
+    const text = document.getElementById("challenge-result-text");
+    if (title) title.textContent = won ? "Challenge complete" : "Challenge failed";
+    if (text) {
+      text.textContent = won
+        ? `${progress?.challenge.name}: done, on orbit ${orbitOf(station).orbit}. Pick another in the Challenge panel, or keep building.`
+        : `${progress?.challenge.name}: ${progress?.failedBecause ?? ""} Fix the station and try again from the Challenge panel.`;
+    }
+    banner.hidden = false;
+    setSpeed(0);
+  }
 }
 
 function moduleById(id: number | null): PlacedModule | undefined {
@@ -369,6 +401,13 @@ async function start(): Promise<void> {
       },
     });
     showAbandoned();
+    renderChallenge(station, {
+      start: (id) => {
+        if (run({ type: "challenge", challenge: id })) say("Challenge started. Good luck.");
+      },
+      quit: () => run({ type: "challenge", challenge: null }),
+    });
+    showChallengeResult();
     renderInspector(station, moduleById(selectedId), {
       unfit: (moduleId, mount) => run({ type: "unfit", moduleId, mount }),
       changeCrew: (moduleId, delta) =>
@@ -449,6 +488,10 @@ async function start(): Promise<void> {
     if (document.visibilityState === "hidden") saveNow();
   });
   window.addEventListener("pagehide", saveNow);
+  document.getElementById("challenge-result-close")?.addEventListener("click", () => {
+    const banner = document.getElementById("challenge-result");
+    if (banner) banner.hidden = true;
+  });
   document.getElementById("abandoned-close")?.addEventListener("click", () => {
     abandonedSeen = true;
     dirty = true;

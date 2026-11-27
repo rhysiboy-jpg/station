@@ -39,6 +39,8 @@
         <input type="file" id="import-file" accept=".json,application/json" hidden />
         <p class="muted" id="save-state">Autosaves in this browser.</p>
       </div>
+      <h2>Challenge</h2>
+      <div class="list challenge" id="challenge"></div>
       <p class="help">
         Click to place. Equipment: internal goes in a module's slots; external goes on a free hardpoint, so
         point at the empty cell beside one. Click a module with nothing selected to inspect it. Right-drag or
@@ -86,6 +88,13 @@
     </div>
 
     <p id="message" class="message" role="status" aria-live="polite"></p>
+    <div class="panel banner" id="challenge-result" hidden role="alertdialog" aria-labelledby="challenge-result-title">
+      <h2 id="challenge-result-title">Challenge complete</h2>
+      <p id="challenge-result-text"></p>
+      <div class="banner-actions">
+        <button type="button" id="challenge-result-close">Carry on</button>
+      </div>
+    </div>
     <div class="panel banner" id="abandoned" hidden role="alertdialog" aria-labelledby="abandoned-title">
       <h2 id="abandoned-title">Station abandoned</h2>
       <p id="abandoned-text">The crew had nowhere left to go and have returned to Earth.</p>

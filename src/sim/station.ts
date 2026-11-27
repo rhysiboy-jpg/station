@@ -1,4 +1,4 @@
-import { DIFFICULTIES, MODULE_TYPES, type Difficulty, type EquipmentTypeId } from "./content";
+import { DIFFICULTIES, MODULE_TYPES, type ChallengeId, type Difficulty, type EquipmentTypeId } from "./content";
 import type { Placement } from "./geometry";
 
 /** Only low Earth orbit exists in the prototype; GEO and sun-synchronous come with the campaign. */
@@ -14,6 +14,19 @@ export interface PlacedModule extends Placement {
   hardpoints: (EquipmentTypeId | null)[];
   /** Crew assigned here. A build choice, so it lives with the layout and undoes with it. */
   crew: number;
+}
+
+/** A challenge in progress or finished on this station. */
+export interface ChallengeRun {
+  id: ChallengeId;
+  startTick: number;
+  /** GB already sent when it began, so goals count only what comes after. */
+  downlinkedAtStart: number;
+  /** Ticks each hold has currently been unmet in a row. */
+  lapses: number[];
+  outcome: "running" | "won" | "failed";
+  endedTick: number | null;
+  failedBecause: string | null;
 }
 
 /** A module's atmosphere, in kg of each gas. */
@@ -50,6 +63,8 @@ export interface Station {
   downlinked: number;
   /** GB made that had nowhere to go. */
   dataLost: number;
+  /** The challenge being played, or null for free play. */
+  challenge: ChallengeRun | null;
   /** Ticks each module has spent in red on a condition that counts towards going offline. */
   redTicks: Record<ModuleId, number>;
   /** Modules that are offline: they make, use and hold nothing until they recover. */
@@ -77,6 +92,7 @@ export function createStation(): Station {
     data: {},
     downlinked: 0,
     dataLost: 0,
+    challenge: null,
     redTicks: {},
     offline: [],
     abandoned: false,
