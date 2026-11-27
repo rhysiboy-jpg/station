@@ -24,6 +24,7 @@ import {
   type Station,
 } from "./sim";
 import { renderAlerts, renderInspector, renderStatus } from "./ui/hud";
+import { exportStation, importStation, readAutosave, writeAutosave } from "./ui/saves";
 import {
   CELL,
   drawEquipmentGhost,
@@ -95,14 +96,35 @@ function run(command: Command): boolean {
 }
 
 /** Starts again from a single core node, keeping the chosen difficulty. */
-function newStation(): void {
-  const difficulty = station.difficulty;
-  station = { ...createStation(), difficulty };
+function newStation(askFirst: boolean): void {
+  if (askFirst && station.modules.length > 1 && !window.confirm("Start a new station? This one will be replaced. Export it first if you want to keep it.")) {
+    return;
+  }
+  replaceStation({ ...createStation(), difficulty: station.difficulty });
+  say("");
+}
+
+/** Swaps in a different station (new, loaded or imported) and resets the view around it. */
+function replaceStation(next: Station): void {
+  station = next;
   selectedId = null;
   abandonedSeen = false;
   setTool(null);
-  say("");
+  const difficulty = document.getElementById("difficulty") as HTMLSelectElement | null;
+  if (difficulty) difficulty.value = station.difficulty;
+  saveNow();
   dirty = true;
+}
+
+/** The station last written to autosave, so unchanged stations aren't rewritten. */
+let autosaved: Station | undefined;
+
+function saveNow(): void {
+  if (station === autosaved) return;
+  const ok = writeAutosave(station);
+  autosaved = station;
+  const note = document.getElementById("save-state");
+  if (note) note.textContent = ok ? "Autosaves in this browser." : "Can't autosave here (browser storage is off). Export to keep your station.";
 }
 
 /** True once the player has dismissed the abandoned banner for this station. */
@@ -400,8 +422,33 @@ async function start(): Promise<void> {
 
   const difficulty = document.getElementById("difficulty") as HTMLSelectElement;
   difficulty.addEventListener("change", () => run({ type: "difficulty", difficulty: difficulty.value as Difficulty }));
-  document.getElementById("new-station")?.addEventListener("click", newStation);
-  document.getElementById("abandoned-new")?.addEventListener("click", newStation);
+  document.getElementById("new-station")?.addEventListener("click", () => newStation(true));
+  document.getElementById("abandoned-new")?.addEventListener("click", () => newStation(false));
+  document.getElementById("export-station")?.addEventListener("click", () => {
+    exportStation(station);
+    say("Station exported.");
+  });
+  const importFile = document.getElementById("import-file") as HTMLInputElement;
+  document.getElementById("import-station")?.addEventListener("click", () => importFile.click());
+  importFile.addEventListener("change", async () => {
+    const file = importFile.files?.[0];
+    importFile.value = "";
+    if (!file) return;
+    const result = await importStation(file);
+    if (!result.ok) {
+      say(`Couldn't import ${file.name}: ${result.message}`, true);
+      return;
+    }
+    replaceStation(result.station);
+    say(`Imported ${file.name}.`);
+  });
+
+  // Autosave every few seconds while something changes, and when the tab is hidden or closed.
+  setInterval(saveNow, 5000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveNow();
+  });
+  window.addEventListener("pagehide", saveNow);
   document.getElementById("abandoned-close")?.addEventListener("click", () => {
     abandonedSeen = true;
     dirty = true;
@@ -456,6 +503,11 @@ async function start(): Promise<void> {
 
 buildPalettes();
 setSpeed(1);
+{
+  const restored = readAutosave();
+  if (restored.station) replaceStation(restored.station);
+  if (restored.message) say(restored.message, !restored.station);
+}
 start().catch((error: unknown) => {
   console.error(error);
   say("Could not start the renderer.", true);

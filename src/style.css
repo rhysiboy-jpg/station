@@ -163,7 +163,7 @@ html, body {
 .warn { color: var(--power); }
 .bad { color: var(--bad); }
 
-.overlays { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.overlays { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .overlays button { justify-content: center; gap: 4px; }
 .overlays button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
 

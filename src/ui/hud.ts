@@ -3,16 +3,19 @@ import {
   AIR_LIMITS,
   BATTERY_FLOORS,
   failureOf,
+  dataOf,
   heatOf,
   lifeSupportOf,
   TEMPERATURE_LIMITS,
   EQUIPMENT_TYPES,
   LOWEST_PRIORITY,
+  RACKS_PER_CREW,
   hardpointsOf,
   MODULE_TYPES,
   orbitOf,
   powerOf,
   TICKS_PER_SECOND_AT_1X,
+  type EquipmentType,
   type EquipmentTypeId,
   type ModulePower,
   type Priority,
@@ -101,6 +104,25 @@ export function renderStatus(station: Station): void {
   const load = heat.networks.reduce((sum, n) => sum + n.load, 0);
   const capacity = heat.networks.reduce((sum, n) => sum + n.capacity, 0);
   status("heat-loop", `${kw(load)} made / ${kw(capacity)} rejected`, load > capacity ? "warn" : "good");
+
+  const data = dataOf(station);
+  status(
+    "data-flow",
+    `${data.produced.toFixed(1)} made · ${Math.min(data.downlink, data.produced + data.stored).toFixed(1)} sent GB/h`,
+    data.produced === 0 && data.downlink === 0 ? "muted" : data.produced > data.downlink ? "warn" : "good",
+  );
+  const filling = data.capacity > 0 && data.stored >= data.capacity * 0.95;
+  status(
+    "data-stored",
+    data.capacity > 0 ? `${data.stored.toFixed(1)} / ${data.capacity} GB` : "no storage",
+    filling ? "warn" : data.capacity === 0 ? "muted" : "",
+  );
+  status(
+    "data-sent",
+    `${data.downlinked.toFixed(1)} GB${data.lost > 0.05 ? ` · ${data.lost.toFixed(1)} lost` : ""}`,
+    data.lost > 0.05 ? "warn" : "",
+  );
+  status("data-contact", data.contact ? "yes" : "no", data.contact ? "good" : "bad");
 }
 
 const seconds = (ticks: number) => `${Math.ceil(ticks / TICKS_PER_SECOND_AT_1X)}s`;
@@ -288,14 +310,36 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   }
 
 
+  const data = dataOf(station).modules[module.id];
+  if (data && (data.produced > 0 || data.racksUntended > 0 || data.capacity > 0 || data.downlink > 0)) {
+    html.push(`<h3>Data</h3><dl class="totals">`);
+    if (data.racksWorking + data.racksUntended > 0) {
+      html.push(`<dt>Racks</dt><dd class="${data.racksUntended > 0 ? "warn" : ""}">${data.racksWorking} of ${data.racksWorking + data.racksUntended} tended</dd>`);
+      if (data.racksUntended > 0) {
+        html.push(`<dt></dt><dd class="muted">Each crew member tends ${RACKS_PER_CREW} racks.</dd>`);
+      }
+      html.push(`<dt>Makes</dt><dd>${data.produced.toFixed(1)} GB/h</dd>`);
+    }
+    if (data.capacity > 0) html.push(`<dt>Stores</dt><dd>${data.stored.toFixed(1)} / ${data.capacity} GB</dd>`);
+    if (data.downlink > 0) html.push(`<dt>Sends</dt><dd>up to ${data.downlink.toFixed(1)} GB/h</dd>`);
+    html.push(`</dl>`);
+  }
+
   html.push(`<h3>Slots (${module.slots.length})</h3>`);
   if (module.slots.length === 0) html.push(`<p class="muted">No internal slots.</p>`);
   else {
     html.push("<ul>");
+    // Racks are tended in slot order; running racks past the crew's reach idle.
+    let tendable = (data?.racksWorking ?? 0);
     module.slots.forEach((equipment, index) => {
+      let idle = "";
+      if (equipment && (EQUIPMENT_TYPES[equipment] as EquipmentType).dataPerHour && power?.running.slots[index]) {
+        if (tendable > 0) tendable--;
+        else idle = `<br><small class="warn">Idle: needs crew to tend it</small>`;
+      }
       html.push(
         equipment
-          ? `<li><span>${EQUIPMENT_TYPES[equipment].name}${equipmentNote(equipment, power, power?.running.slots[index])}</span><button type="button" data-unfit="slot:${index}">Remove</button></li>`
+          ? `<li><span>${EQUIPMENT_TYPES[equipment].name}${equipmentNote(equipment, power, power?.running.slots[index])}${idle}</span><button type="button" data-unfit="slot:${index}">Remove</button></li>`
           : `<li class="muted"><span>Empty</span></li>`,
       );
     });

@@ -32,6 +32,12 @@
           </select>
         </label>
         <button type="button" id="new-station">New station</button>
+        <div class="list two">
+          <button type="button" id="export-station" title="Download this station as a file to keep or share">Export</button>
+          <button type="button" id="import-station" title="Load a station file">Import</button>
+        </div>
+        <input type="file" id="import-file" accept=".json,application/json" hidden />
+        <p class="muted" id="save-state">Autosaves in this browser.</p>
       </div>
       <p class="help">
         Click to place. Equipment: internal goes in a module's slots; external goes on a free hardpoint, so
@@ -67,6 +73,10 @@
           <dt>Water</dt><dd id="water-total">–</dd>
           <dt>Hottest</dt><dd id="heat-worst">–</dd>
           <dt>Cooling</dt><dd id="heat-loop">–</dd>
+          <dt>Data</dt><dd id="data-flow">–</dd>
+          <dt>Stored</dt><dd id="data-stored">–</dd>
+          <dt>Sent to Earth</dt><dd id="data-sent">–</dd>
+          <dt>Ground contact</dt><dd id="data-contact" title="Constant in the prototype; contact windows come later">–</dd>
         </dl>
         <div class="overlays" id="overlays" role="group" aria-label="Overlay"></div>
       </section>

@@ -44,6 +44,12 @@ export interface Station {
   water: Record<ModuleId, number>;
   /** Each module's temperature, in °C. */
   temperature: Record<ModuleId, number>;
+  /** GB held in each data storage unit, keyed by module and slot. */
+  data: Record<string, number>;
+  /** GB sent to Earth since the station was created. */
+  downlinked: number;
+  /** GB made that had nowhere to go. */
+  dataLost: number;
   /** Ticks each module has spent in red on a condition that counts towards going offline. */
   redTicks: Record<ModuleId, number>;
   /** Modules that are offline: they make, use and hold nothing until they recover. */
@@ -68,6 +74,9 @@ export function createStation(): Station {
     air: {},
     water: {},
     temperature: {},
+    data: {},
+    downlinked: 0,
+    dataLost: 0,
     redTicks: {},
     offline: [],
     abandoned: false,
