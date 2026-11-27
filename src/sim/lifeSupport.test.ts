@@ -6,6 +6,7 @@ import {
   createStation,
   lifeSupportOf,
   NOMINAL_O2_KPA,
+  MODULE_TYPES,
   TICKS_PER_ORBIT,
   type Command,
   type CommandResult,
@@ -51,6 +52,19 @@ describe("crew headcount", () => {
     expect(lifeSupportOf(station).modules[1]?.crew).toBe(2);
   });
 
+  it("is limited by each module's room, as well as by beds", () => {
+    // Two habitats give 8 beds, but the core node only has room for 2.
+    const station = run(
+      createStation(),
+      habitat,
+      { type: "place", module: "habitat", position: { x: -1, y: -3 }, rotation: 180 },
+    );
+
+    expect(MODULE_TYPES["core-node"].maxCrew).toBe(2);
+    expect(applyCommand(station, crew(1, 3))).toMatchObject({ ok: false, reason: "no-room" });
+    expect(applyCommand(station, crew(1, 2)).ok).toBe(true);
+  });
+
   it("is rejected without a habitat to sleep in", () => {
     expect(applyCommand(createStation(), crew(1, 1))).toMatchObject({ ok: false, reason: "no-beds" });
   });
@@ -73,6 +87,15 @@ describe("crew headcount", () => {
 });
 
 describe("air", () => {
+  it("totals the oxygen aboard across every pressurised module, in kg", () => {
+    // Fresh air at 21 kPa O2 holds about 0.275 kg of oxygen per m³.
+    const station = run(createStation(), habitat);
+    const volume = MODULE_TYPES["core-node"].volume + MODULE_TYPES.habitat.volume;
+
+    expect(lifeSupportOf(station).oxygen).toBeCloseTo((21 / 76.43) * volume, 1);
+    expect(lifeSupportOf(advance(run(station, crew(2, 4)), TICKS_PER_ORBIT)).oxygen).toBeLessThan(lifeSupportOf(station).oxygen);
+  });
+
   it("starts at sea-level oxygen and no CO2 in a new module", () => {
     const air = lifeSupportOf(run(createStation(), habitat)).modules[2];
 

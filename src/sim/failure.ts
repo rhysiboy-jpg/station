@@ -47,11 +47,13 @@ export interface FailureReport {
 
 const RANK: Record<Level, number> = { ok: 0, yellow: 1, red: 2 };
 
-function levelAbove(value: number, limits: { yellow: number; red: number }): Level {
+/** The warning level of a reading where going above the limits is the danger. */
+export function levelAbove(value: number, limits: { yellow: number; red: number }): Level {
   return value >= limits.red ? "red" : value >= limits.yellow ? "yellow" : "ok";
 }
 
-function levelBelow(value: number, limits: { yellow: number; red: number }): Level {
+/** The warning level of a reading where falling below the limits is the danger. */
+export function levelBelow(value: number, limits: { yellow: number; red: number }): Level {
   return value < limits.red ? "red" : value < limits.yellow ? "yellow" : "ok";
 }
 
@@ -99,6 +101,9 @@ function counts(warning: Warning, crewed: boolean): boolean {
   if (warning.condition === "temperature") return true;
   return crewed;
 }
+
+/** The more serious of two levels. */
+export const worseLevel = (a: Level, b: Level): Level => (RANK[b] > RANK[a] ? b : a);
 
 const worst = (warnings: Warning[]): Level =>
   warnings.reduce<Level>((level, w) => (RANK[w.level] > RANK[level] ? w.level : level), "ok");
@@ -153,23 +158,32 @@ export function stepFailure(
     }
   }
 
-  // Crew leave offline modules for the nearest reachable module that is fit to hold them.
+  // Crew leave offline modules for the nearest reachable modules that are fit
+  // to hold them, filling each up to its room before trying the next.
   const after = { ...station, offline: [...offline].sort((a, b) => a - b) };
   const crew = new Map(station.modules.map((m) => [m.id, m.crew]));
+  const byId = new Map(station.modules.map((m) => [m.id, m]));
   let abandoned = false;
   let abandonedBecause: Station["abandonedBecause"] = null;
   for (const m of station.modules) {
-    const leaving = crew.get(m.id) ?? 0;
+    let leaving = crew.get(m.id) ?? 0;
     if (!offline.has(m.id) || leaving === 0) continue;
-    const refuge = nearestRefuge(after, m.id, readings);
-    if (refuge === undefined) {
+    const refuges = fitRefuges(after, m.id, readings);
+    for (const refuge of refuges) {
+      const room = MODULE_TYPES[(byId.get(refuge) as PlacedModule).type].maxCrew - (crew.get(refuge) ?? 0);
+      const moving = Math.min(Math.max(0, room), leaving);
+      crew.set(refuge, (crew.get(refuge) ?? 0) + moving);
+      leaving -= moving;
+      if (leaving === 0) break;
+    }
+    crew.set(m.id, leaving);
+    if (leaving > 0) {
       abandoned = true;
       const cause = warningsOf(station, m, readings, true).find((w) => w.level === "red" && w.condition !== "power");
-      abandonedBecause = (cause?.condition as Station["abandonedBecause"]) ?? null;
+      // Somewhere fit was reachable but full: the crew left for want of room.
+      abandonedBecause = refuges.length > 0 ? "room" : ((cause?.condition as Station["abandonedBecause"]) ?? null);
       break;
     }
-    crew.set(m.id, 0);
-    crew.set(refuge, (crew.get(refuge) ?? 0) + leaving);
   }
 
   const modules = abandoned
@@ -179,11 +193,11 @@ export function stepFailure(
 }
 
 /**
- * The nearest module, by joints through pressurised modules, that is online and
- * has nothing in red for crew. On hard difficulty the way can't pass through an
- * offline module.
+ * Every module crew could shelter in, nearest first (by connections through
+ * pressurised modules): online, with nothing in red for crew. On hard
+ * difficulty the way can't pass through an offline module.
  */
-function nearestRefuge(station: Station, from: ModuleId, readings: Readings): ModuleId | undefined {
+function fitRefuges(station: Station, from: ModuleId, readings: Readings): ModuleId[] {
   const byId = new Map(station.modules.map((m) => [m.id, m]));
   const pressurised = (id: ModuleId) => {
     const m = byId.get(id);
@@ -197,6 +211,7 @@ function nearestRefuge(station: Station, from: ModuleId, readings: Readings): Mo
   }
 
   const cut = offlineCutsNetworks(station);
+  const fit: ModuleId[] = [];
   const seen = new Set([from]);
   let frontier = [from];
   while (frontier.length > 0) {
@@ -207,11 +222,11 @@ function nearestRefuge(station: Station, from: ModuleId, readings: Readings): Mo
         seen.add(n);
         const module = byId.get(n) as PlacedModule;
         const unfit = warningsOf(station, module, readings, true).some((w) => w.level === "red" && w.condition !== "power");
-        if (!isOffline(station, n) && !unfit) return n;
+        if (!isOffline(station, n) && !unfit) fit.push(n);
         if (!(cut && isOffline(station, n))) next.push(n);
       }
     }
     frontier = next;
   }
-  return undefined;
+  return fit;
 }

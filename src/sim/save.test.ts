@@ -88,6 +88,17 @@ describe("saving and loading", () => {
   });
 });
 
+describe("older saves", () => {
+  it("load version 1 files, from before challenges, in free play", () => {
+    const v2 = JSON.parse(saveStation(busyStation())) as { version: number; station: Record<string, unknown> };
+    delete v2.station.challenge;
+    const result = loadStation(JSON.stringify({ ...v2, version: 1 }));
+
+    expect(result.ok && result.station.challenge).toBeNull();
+    expect(result.ok && result.station.tick).toBe(busyStation().tick);
+  });
+});
+
 describe("loading a bad file", () => {
   const good = () => JSON.parse(saveStation(busyStation())) as { game: string; version: number; station: Record<string, unknown> };
   const rejects = (file: unknown, message: RegExp) => {

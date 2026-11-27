@@ -28,10 +28,22 @@ describe("the orbit", () => {
 });
 
 describe("determinism", () => {
+  // Every system: power, crew and life support, heat, data, failure and a challenge.
   const commands: Command[] = [
     { type: "place", module: "truss", position: { x: 1, y: 0 }, rotation: 90 },
     { type: "fit", moduleId: 2, mount: { kind: "hardpoint", index: 0 }, equipment: "solar-panel" },
     { type: "fit", moduleId: 1, mount: { kind: "slot", index: 0 }, equipment: "battery" },
+    { type: "place", module: "habitat", position: { x: 0, y: 1 }, rotation: 0 },
+    { type: "fit", moduleId: 3, mount: { kind: "slot", index: 0 }, equipment: "data-storage" },
+    { type: "place", module: "life-support", position: { x: 1, y: 4 }, rotation: 0 },
+    { type: "fit", moduleId: 4, mount: { kind: "slot", index: 0 }, equipment: "oxygen-generator" },
+    { type: "fit", moduleId: 4, mount: { kind: "slot", index: 1 }, equipment: "water-recycler" },
+    { type: "place", module: "lab", position: { x: -1, y: -2 }, rotation: 0 },
+    { type: "fit", moduleId: 5, mount: { kind: "slot", index: 0 }, equipment: "lab-rack" },
+    { type: "fit", moduleId: 2, mount: { kind: "hardpoint", index: 3 }, equipment: "antenna" },
+    { type: "crew", moduleId: 3, headcount: 2 },
+    { type: "crew", moduleId: 5, headcount: 1 },
+    { type: "challenge", challenge: "shakedown" },
   ];
 
   function play(stepsBetweenCommands: number[]): Station {

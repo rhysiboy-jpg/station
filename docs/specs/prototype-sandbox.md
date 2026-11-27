@@ -1,6 +1,6 @@
 # Spec: prototype sandbox
 
-_Status: draft, ready for ticket breakdown. Vocabulary follows [GLOSSARY.md](../../GLOSSARY.md); design context in [design.md](../design.md)._
+_Status: built (tickets #2 to #13). Next: playtest ([checklist](../playtest.md)), then update the design doc before designing the campaign. Vocabulary follows [GLOSSARY.md](../../GLOSSARY.md); design context in [design.md](../design.md)._
 
 ## Problem Statement
 

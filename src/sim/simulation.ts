@@ -1,4 +1,5 @@
 // Advancing the simulation tick by tick.
+import { stepChallenge } from "./challenge";
 import { stepData } from "./data";
 import { stepFailure } from "./failure";
 import { stepHeat } from "./heat";
@@ -23,6 +24,7 @@ function step(station: Station): Station {
     ...stepHeat(station, power),
     ...stepData(station, power),
     ...stepFailure(station, power),
+    ...stepChallenge(station, power),
     tick: station.tick + 1,
   };
 }

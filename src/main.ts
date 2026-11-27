@@ -1,3 +1,6 @@
+// The game in the browser: owns the current station and what the player is
+// doing (tool, selection, camera, speed, overlay), draws each frame and runs
+// the fixed-tick loop. Panels, banners, keys and saves live in src/ui.
 import { Application, Container, type FederatedPointerEvent } from "pixi.js";
 import {
   advance,
@@ -8,7 +11,6 @@ import {
   failureOf,
   footprintOf,
   hardpointsOf,
-  orbitOf,
   MODULE_TYPES,
   sizeOf,
   TICKS_PER_SECOND_AT_1X,
@@ -23,8 +25,12 @@ import {
   type Rotation,
   type Station,
 } from "./sim";
+import { createBanners } from "./ui/banners";
+import { buildPanel } from "./ui/buildPanel";
+import { renderChallenge } from "./ui/challengePanel";
 import { renderAlerts, renderInspector, renderStatus } from "./ui/hud";
-import { exportStation, importStation, readAutosave, writeAutosave } from "./ui/saves";
+import { bindKeyboard } from "./ui/keyboard";
+import { bindSaveControls, readAutosave } from "./ui/saves";
 import {
   CELL,
   drawEquipmentGhost,
@@ -33,8 +39,8 @@ import {
   drawModuleOutline,
   drawStation,
 } from "./view/stationView";
-import { overlayFor, OVERLAYS, type OverlayKind } from "./view/overlays";
-import { equipmentColour, palette } from "./view/palette";
+import { overlayFor, type OverlayKind } from "./view/overlays";
+import { palette } from "./view/palette";
 
 type Tool =
   | { kind: "place"; module: ModuleTypeId }
@@ -107,49 +113,13 @@ function newStation(askFirst: boolean): void {
 /** Swaps in a different station (new, loaded or imported) and resets the view around it. */
 function replaceStation(next: Station): void {
   station = next;
+  banners.reset(next);
   selectedId = null;
-  abandonedSeen = false;
   setTool(null);
   const difficulty = document.getElementById("difficulty") as HTMLSelectElement | null;
   if (difficulty) difficulty.value = station.difficulty;
-  saveNow();
+  saves.saveNow();
   dirty = true;
-}
-
-/** The station last written to autosave, so unchanged stations aren't rewritten. */
-let autosaved: Station | undefined;
-
-function saveNow(): void {
-  if (station === autosaved) return;
-  const ok = writeAutosave(station);
-  autosaved = station;
-  const note = document.getElementById("save-state");
-  if (note) note.textContent = ok ? "Autosaves in this browser." : "Can't autosave here (browser storage is off). Export to keep your station.";
-}
-
-/** True once the player has dismissed the abandoned banner for this station. */
-let abandonedSeen = false;
-
-/** Abandonment is the only game over: pause and say so, once. */
-function showAbandoned(): void {
-  const banner = document.getElementById("abandoned");
-  if (!banner) return;
-  const show = station.abandoned && !abandonedSeen;
-  if (show && banner.hidden) {
-    setSpeed(0);
-    const text = document.getElementById("abandoned-text");
-    if (text) {
-      const because = {
-        temperature: "the modules they could reach had overheated",
-        o2: "the modules they could reach were short of oxygen",
-        co2: "the air in the modules they could reach had too much CO₂",
-        water: "the water had run out",
-      };
-      const why = station.abandonedBecause ? because[station.abandonedBecause] : "nowhere fit was left";
-      text.textContent = `On orbit ${orbitOf(station).orbit} the crew returned to Earth: ${why}. You can keep looking at what went wrong, or start again.`;
-    }
-  }
-  banner.hidden = !show;
 }
 
 function moduleById(id: number | null): PlacedModule | undefined {
@@ -226,43 +196,6 @@ function toggleOverlay(kind: OverlayKind): void {
     button.setAttribute("aria-pressed", String(button.dataset.overlay === overlay));
   }
   dirty = true;
-}
-
-function buildPalettes(): void {
-  for (const { kind, name, key } of OVERLAYS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.overlay = kind;
-    button.setAttribute("aria-pressed", "false");
-    button.innerHTML = `${name} <kbd>${key.toUpperCase()}</kbd>`;
-    button.addEventListener("click", () => toggleOverlay(kind));
-    overlaysEl.appendChild(button);
-  }
-  (Object.keys(MODULE_TYPES) as ModuleTypeId[]).forEach((id, index) => {
-    const type = MODULE_TYPES[id];
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.id = id;
-    button.innerHTML = `<span>${type.name}</span><small>${type.width}×${type.height} <kbd>${index + 1}</kbd></small>`;
-    button.addEventListener("click", () =>
-      setTool(tool?.kind === "place" && tool.module === id ? null : { kind: "place", module: id }),
-    );
-    modulesEl.appendChild(button);
-  });
-  (Object.keys(EQUIPMENT_TYPES) as EquipmentTypeId[]).forEach((id) => {
-    const type = EQUIPMENT_TYPES[id];
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.id = id;
-    button.title = `${type.name} (${type.mount})`;
-    const colour = `#${equipmentColour[id].toString(16).padStart(6, "0")}`;
-    const shortName = id === "oxygen-generator" ? "O2 / CO2" : type.name;
-    button.innerHTML = `<span class="name"><span class="swatch" style="background:${colour}"></span>${shortName}</span>`;
-    button.addEventListener("click", () =>
-      setTool(tool?.kind === "equip" && tool.equipment === id ? null : { kind: "equip", equipment: id }),
-    );
-    equipmentEl.appendChild(button);
-  });
 }
 
 function click(): void {
@@ -368,7 +301,13 @@ async function start(): Promise<void> {
         dirty = true;
       },
     });
-    showAbandoned();
+    renderChallenge(station, {
+      start: (id) => {
+        if (run({ type: "challenge", challenge: id })) say("Challenge started. Good luck.");
+      },
+      quit: () => run({ type: "challenge", challenge: null }),
+    });
+    banners.update(station);
     renderInspector(station, moduleById(selectedId), {
       unfit: (moduleId, mount) => run({ type: "unfit", moduleId, mount }),
       changeCrew: (moduleId, delta) =>
@@ -424,66 +363,6 @@ async function start(): Promise<void> {
   difficulty.addEventListener("change", () => run({ type: "difficulty", difficulty: difficulty.value as Difficulty }));
   document.getElementById("new-station")?.addEventListener("click", () => newStation(true));
   document.getElementById("abandoned-new")?.addEventListener("click", () => newStation(false));
-  document.getElementById("export-station")?.addEventListener("click", () => {
-    exportStation(station);
-    say("Station exported.");
-  });
-  const importFile = document.getElementById("import-file") as HTMLInputElement;
-  document.getElementById("import-station")?.addEventListener("click", () => importFile.click());
-  importFile.addEventListener("change", async () => {
-    const file = importFile.files?.[0];
-    importFile.value = "";
-    if (!file) return;
-    const result = await importStation(file);
-    if (!result.ok) {
-      say(`Couldn't import ${file.name}: ${result.message}`, true);
-      return;
-    }
-    replaceStation(result.station);
-    say(`Imported ${file.name}.`);
-  });
-
-  // Autosave every few seconds while something changes, and when the tab is hidden or closed.
-  setInterval(saveNow, 5000);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") saveNow();
-  });
-  window.addEventListener("pagehide", saveNow);
-  document.getElementById("abandoned-close")?.addEventListener("click", () => {
-    abandonedSeen = true;
-    dirty = true;
-  });
-
-  let lastSpeed = 1;
-  window.addEventListener("keydown", (e) => {
-    if (e.target instanceof HTMLInputElement) return;
-    const ids = Object.keys(MODULE_TYPES) as ModuleTypeId[];
-    const key = e.key.toLowerCase();
-    if ((e.ctrlKey || e.metaKey) && key === "z") {
-      e.preventDefault();
-      run({ type: "undo" });
-    } else if (key === " ") {
-      e.preventDefault();
-      if (speed === 0) setSpeed(lastSpeed);
-      else {
-        lastSpeed = speed;
-        setSpeed(0);
-      }
-    } else if (key === "r") rotation = ROTATIONS[(ROTATIONS.indexOf(rotation) + 1) % 4] as Rotation;
-    else if (OVERLAYS.some((o) => o.key === key)) toggleOverlay(OVERLAYS.find((o) => o.key === key)?.kind as OverlayKind);
-    else if (key === "x" || key === "delete") setTool(tool?.kind === "remove" ? null : { kind: "remove" });
-    else if (key === "escape") {
-      setTool(null);
-      selectedId = null;
-    } else if (/^[1-9]$/.test(key) && ids[Number(key) - 1]) setTool({ kind: "place", module: ids[Number(key) - 1] as ModuleTypeId });
-    else if (key === "arrowleft" || key === "a") camera.x += PAN_STEP;
-    else if (key === "arrowright" || key === "d") camera.x -= PAN_STEP;
-    else if (key === "arrowup" || key === "w") camera.y += PAN_STEP;
-    else if (key === "arrowdown" || key === "s") camera.y -= PAN_STEP;
-    else return;
-    dirty = true;
-  });
-
   // Fixed-tick loop (ADR 0002): speed only changes how many ticks run per real second.
   let pending = 0;
   app.ticker.add((ticker) => {
@@ -501,7 +380,40 @@ async function start(): Promise<void> {
   });
 }
 
-buildPalettes();
+const banners = createBanners({ pause: () => setSpeed(0), changed: () => (dirty = true) });
+const saves = bindSaveControls({ current: () => station, replace: replaceStation, say });
+
+buildPanel({
+  pickModule: (id) => setTool(tool?.kind === "place" && tool.module === id ? null : { kind: "place", module: id }),
+  pickEquipment: (id) => setTool(tool?.kind === "equip" && tool.equipment === id ? null : { kind: "equip", equipment: id }),
+  toggleOverlay,
+});
+
+let lastSpeed = 1;
+bindKeyboard({
+  undo: () => run({ type: "undo" }),
+  togglePause: () => {
+    if (speed === 0) setSpeed(lastSpeed);
+    else {
+      lastSpeed = speed;
+      setSpeed(0);
+    }
+  },
+  rotate: () => (rotation = ROTATIONS[(ROTATIONS.indexOf(rotation) + 1) % 4] as Rotation),
+  toggleOverlay,
+  toggleRemove: () => setTool(tool?.kind === "remove" ? null : { kind: "remove" }),
+  cancel: () => {
+    setTool(null);
+    selectedId = null;
+  },
+  pickModule: (id) => setTool({ kind: "place", module: id }),
+  pan: (dx, dy) => {
+    camera.x -= dx * PAN_STEP;
+    camera.y -= dy * PAN_STEP;
+  },
+  changed: () => (dirty = true),
+});
+
 setSpeed(1);
 {
   const restored = readAutosave();

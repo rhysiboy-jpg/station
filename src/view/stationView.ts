@@ -13,8 +13,8 @@ import {
   type Placement,
   type Station,
 } from "../sim";
-import type { JointOverlay, Overlay } from "./overlays";
-import { equipmentColour, palette } from "./palette";
+import type { ConnectionOverlay, Overlay } from "./overlays";
+import { equipmentColour, levelColour, palette } from "./palette";
 
 /** Size of one grid cell in screen pixels. */
 export const CELL = 48;
@@ -66,16 +66,16 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
   for (const module of station.modules) {
     let tint: number | undefined;
     if (options.removing === module.id) tint = palette.invalid;
-    else if (options.selected === module.id) tint = palette.selected;
     else if (options.overlay) tint = options.overlay.modules[module.id]?.tint;
 
     const body = drawModuleBody(module, tint, options.overlay !== undefined && tint !== undefined && tint !== palette.invalid);
     const status = options.status?.[module.id];
     if ((options.overlay && !options.overlay.modules[module.id]) || status?.offline) body.alpha = 0.35;
     if (status && (status.offline || status.level !== "ok")) {
-      layer.addChild(drawStatusRing(module, status.offline ? palette.offline : status.level === "red" ? palette.danger : palette.warning));
+      layer.addChild(drawStatusRing(module, status.offline ? palette.offline : levelColour(status.level, palette.warning)));
     }
     layer.addChild(body);
+    if (options.selected === module.id) layer.addChild(drawStatusRing(module, palette.selected, 7));
     for (const port of portsOf(module)) {
       layer.addChild(drawPort(port, joined.has(portKey(port)) ? palette.portJoined : palette.portFree));
     }
@@ -87,14 +87,13 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     layer.addChild(drawSlots(module));
     layer.addChild(drawLabel(module, status?.offline ? { figure: "OFFLINE", figureColour: palette.danger } : options.overlay?.modules[module.id]));
   }
-  for (const joint of options.overlay?.joints ?? []) layer.addChild(drawJoint(joint));
+  for (const connection of options.overlay?.connections ?? []) layer.addChild(drawConnection(connection));
   return layer;
 }
 
-/** A ring just outside a module: yellow or red for warnings, grey when offline. */
-function drawStatusRing(placement: Placement, colour: number): Graphics {
+/** A ring just outside a module: yellow or red for warnings, grey when offline, white (further out) when selected. */
+function drawStatusRing(placement: Placement, colour: number, pad = 3): Graphics {
   const { left, top, width, height } = bounds(placement);
-  const pad = 3;
   return new Graphics()
     .roundRect(left - pad, top - pad, width + pad * 2, height + pad * 2, 8)
     .stroke({ width: 2, color: colour, alpha: 0.9 });
@@ -229,20 +228,29 @@ function outwardRect(point: PlacedPort, from: number, depth: number, span: numbe
 }
 
 /**
- * A joint as a bridge across the gap between two modules, filled by how much
+ * A connection as a bridge across the gap between two modules, filled by how much
  * of its capacity is in use: dim when quiet, yellow when nearly full, red
  * and wider when it is the bottleneck.
  */
-function drawJoint(joint: JointOverlay): Graphics {
+function drawConnection(connection: ConnectionOverlay): Container {
   const gap = MODULE_INSET * 2;
-  const colour = joint.bottleneck ? palette.danger : joint.load >= 0.75 ? palette.warning : palette.label;
-  const span = joint.bottleneck ? 20 : 14;
+  const colour = connection.bottleneck ? palette.danger : connection.load >= 0.75 ? palette.warning : palette.label;
+  const span = connection.bottleneck ? 20 : 14;
   const g = new Graphics();
-  g.poly(outwardRect(joint.port, 0, gap, span)).fill({ color: palette.background }).stroke({ width: 1, color: colour, alpha: 0.8 });
+  g.poly(outwardRect(connection.port, 0, gap, span)).fill({ color: palette.background }).stroke({ width: 1, color: colour, alpha: 0.8 });
   // The filled share, from the middle outwards.
-  const filled = span * Math.max(0.08, joint.load);
-  g.poly(outwardRect(joint.port, 1, gap - 2, filled)).fill({ color: colour, alpha: joint.bottleneck ? 1 : 0.85 });
-  return g;
+  const filled = span * Math.max(0.08, connection.load);
+  g.poly(outwardRect(connection.port, 1, gap - 2, filled)).fill({ color: colour, alpha: connection.bottleneck ? 1 : 0.85 });
+  if (!connection.label) return g;
+  // Name what the bottleneck limits, just beside it along the edge.
+  const layer = new Container();
+  layer.addChild(g);
+  const f = edgeFrame(connection.port);
+  const tag = new Text({ text: connection.label, style: { fontFamily: FONT, fontSize: 11, fill: palette.danger, fontWeight: "bold" } });
+  tag.anchor.set(0.5);
+  tag.position.set(f.x + f.out[0] * MODULE_INSET + f.along[0] * 18, f.y + f.out[1] * MODULE_INSET + f.along[1] * 18);
+  layer.addChild(tag);
+  return layer;
 }
 
 function drawPort(port: PlacedPort, colour: number): Graphics {

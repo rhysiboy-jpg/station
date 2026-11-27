@@ -1,4 +1,5 @@
-import { MODULE_TYPES, type Difficulty, type EquipmentTypeId, type ModuleTypeId } from "./content";
+import { startChallenge } from "./challenge";
+import { MODULE_TYPES, type ChallengeId, type Difficulty, type EquipmentTypeId, type ModuleTypeId } from "./content";
 import {
   clearBlockedHardpoints,
   fitEquipment,
@@ -20,6 +21,8 @@ export type Command =
   | { type: "crew"; moduleId: ModuleId; headcount: number }
   /** A station setting, not a build change: it isn't undone by undo. */
   | { type: "difficulty"; difficulty: Difficulty }
+  /** Start a challenge on the station as it stands, or null to return to free play. Not undone by undo. */
+  | { type: "challenge"; challenge: ChallengeId | null }
   | { type: "undo" };
 
 export type RejectionReason =
@@ -34,6 +37,8 @@ export type RejectionReason =
   | "unpressurised"
   | "bad-headcount"
   | "offline"
+  | "no-room"
+  | "abandoned"
   | MountRejection;
 
 export type CommandResult =
@@ -57,6 +62,15 @@ export function applyCommand(station: Station, command: Command): CommandResult 
       return changeEquipment(station, command);
     case "crew":
       return assignCrew(station, command);
+    case "challenge":
+      if (command.challenge !== null && station.abandoned) {
+        return { ok: false, reason: "abandoned", message: "This station has been abandoned. Start a new one first." };
+      }
+      return {
+        ok: true,
+        station: { ...station, challenge: command.challenge === null ? null : startChallenge(station, command.challenge) },
+        displaced: [],
+      };
     case "difficulty":
       return { ok: true, station: { ...station, difficulty: command.difficulty }, displaced: [] };
     case "undo":
@@ -109,6 +123,19 @@ function undo(station: Station): CommandResult {
   if (!previous) {
     return { ok: false, reason: "nothing-to-undo", message: "Nothing to undo." };
   }
+  // Undo rewinds the layout, not time: it can't bring crew back after the
+  // station is abandoned, or put them back into a module that has since failed.
+  if (station.abandoned) {
+    return { ok: false, reason: "abandoned", message: "The station has been abandoned. Undo can't bring the crew back." };
+  }
+  const intoOffline = previous.find((m) => m.crew > 0 && isOffline(station, m.id));
+  if (intoOffline) {
+    return {
+      ok: false,
+      reason: "offline",
+      message: `Undoing that would put crew back into the ${MODULE_TYPES[intoOffline.type].name.toLowerCase()}, which is offline.`,
+    };
+  }
   return {
     ok: true,
     station: { ...station, modules: previous, history: station.history.slice(0, -1) },
@@ -147,6 +174,10 @@ function assignCrew(station: Station, command: Extract<Command, { type: "crew" }
   }
   if (command.headcount > 0 && !MODULE_TYPES[module.type].pressurised) {
     return { ok: false, reason: "unpressurised", message: "Crew can only work in pressurised modules." };
+  }
+  const room = MODULE_TYPES[module.type].maxCrew;
+  if (command.headcount > room) {
+    return { ok: false, reason: "no-room", message: `A ${MODULE_TYPES[module.type].name.toLowerCase()} has room for ${room} crew.` };
   }
   const modules = station.modules.map((m) => (m.id === module.id ? { ...m, crew: command.headcount } : m));
   if (crewOf(modules) > bedsOf(modules)) {

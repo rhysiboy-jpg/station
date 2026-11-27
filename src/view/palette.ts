@@ -1,5 +1,16 @@
-// Schematic / blueprint colours. Network colours join this as overlays arrive.
-import type { EquipmentTypeId } from "../sim";
+// Schematic / blueprint colours. One colour per network, used everywhere that
+// network appears; yellow and red are kept for warnings and nothing else.
+// Keep in step with the matching custom properties in style.css.
+import type { EquipmentTypeId, Level } from "../sim";
+
+/** One colour per network (overlays, inspector, totals, equipment swatches). */
+export const network = {
+  power: 0x3fd2ff,
+  heat: 0xff9446,
+  air: 0x4fe3a1,
+  water: 0x5a7dff,
+  data: 0xc58cff,
+};
 
 export const palette = {
   background: 0x0b1a2e,
@@ -12,31 +23,33 @@ export const palette = {
   portFree: 0x7fd4ff,
   portJoined: 0xffffff,
   hardpointFree: 0x4f78a8,
-  valid: 0x5fe3a1,
-  invalid: 0xff6b6b,
-  selected: 0xffd166,
-  power: 0xffd166,
-  unpowered: 0xff6b6b,
-  /** Some of a module's equipment has been shed. */
-  shedding: 0xff9f43,
-  // Network colours for overlays (the look pass, #13, will settle these).
-  heat: 0xff8a5c,
-  air: 0x5fe3a1,
-  water: 0x5fb8ff,
-  data: 0xc39bff,
-  // Warning levels, shared by every overlay.
+  /** Placement previews. */
+  valid: 0x8be08b,
+  invalid: 0xff4d5e,
+  selected: 0xffffff,
+  ...network,
+  // Warning levels, shared by every overlay and status. Nothing else uses these.
   warning: 0xffe14d,
-  danger: 0xff4d4d,
+  danger: 0xff4d5e,
   offline: 0x6f8db3,
+  // Power overlay states, in warning terms: shedding is a yellow, dark is a red.
+  unpowered: 0xff4d5e,
+  shedding: 0xffe14d,
 };
 
+/** A warning level's colour; `ok` is whatever the context uses when all is well. */
+export function levelColour(level: Level, ok: number): number {
+  return level === "red" ? palette.danger : level === "yellow" ? palette.warning : ok;
+}
+
+/** Equipment swatches take their network's colour. */
 export const equipmentColour: Record<EquipmentTypeId, number> = {
-  "solar-panel": 0x2f6fd0,
-  radiator: 0xdfe8f2,
-  antenna: 0xb8c7d9,
-  battery: 0xffd166,
-  "oxygen-generator": 0x5fe3a1,
-  "water-recycler": 0x5fb8ff,
-  "lab-rack": 0xc39bff,
-  "data-storage": 0xff9f6b,
+  "solar-panel": network.power,
+  battery: 0x9be9ff,
+  radiator: network.heat,
+  "oxygen-generator": network.air,
+  "water-recycler": network.water,
+  "lab-rack": network.data,
+  "data-storage": 0xa46cf0,
+  antenna: 0xdcc2ff,
 };

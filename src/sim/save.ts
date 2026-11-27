@@ -1,14 +1,26 @@
 // Saves: a station as versioned JSON, and back. Loading checks everything, so
 // a broken or hand-edited file is rejected with a clear message rather than
 // breaking the game. Undo history isn't saved: undo starts fresh after a load.
-import { DIFFICULTIES, EQUIPMENT_TYPES, MODULE_TYPES, type EquipmentTypeId, type ModuleTypeId } from "./content";
+import {
+  CHALLENGES,
+  DIFFICULTIES,
+  EQUIPMENT_TYPES,
+  MODULE_TYPES,
+  type Challenge,
+  type ChallengeId,
+  type EquipmentTypeId,
+  type ModuleTypeId,
+} from "./content";
 import { hardpointsOf } from "./equipment";
 import { footprintOf, type Rotation } from "./geometry";
 import { connectedToCore } from "./placement";
-import { bedsOf, crewOf, type Air, type PlacedModule, type Station } from "./station";
+import { bedsOf, crewOf, type Air, type ChallengeRun, type PlacedModule, type Station } from "./station";
 
-/** Bump when the format changes, and teach `loadStation` to upgrade older files. */
-export const SAVE_VERSION = 1;
+/**
+ * Bump when the format changes, and teach `loadStation` to upgrade older files.
+ * 1: first format. 2: adds `challenge` (version 1 files load in free play).
+ */
+export const SAVE_VERSION = 2;
 const GAME = "orbitwright";
 
 type SavedStation = Omit<Station, "history">;
@@ -69,7 +81,8 @@ function readFile(file: unknown): Station {
       s.abandonedBecause === "temperature" ||
       s.abandonedBecause === "o2" ||
       s.abandonedBecause === "co2" ||
-      s.abandonedBecause === "water"
+      s.abandonedBecause === "water" ||
+      s.abandonedBecause === "room"
         ? s.abandonedBecause
         : fail("Part of the save is broken: abandonedBecause isn't valid."),
     difficulty:
@@ -79,6 +92,8 @@ function readFile(file: unknown): Station {
     data: record(s.data, "data", (v, k) => amount(v, `data.${k}`)),
     downlinked: amount(s.downlinked, "downlinked"),
     dataLost: amount(s.dataLost, "dataLost"),
+    // Version 1 files predate challenges.
+    challenge: version < 2 ? null : readChallenge(s.challenge),
     history: [],
   };
   checkLayout(station);
@@ -191,6 +206,30 @@ function tier(value: unknown, field: string): number {
 function boolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") fail(`Part of the save is broken: ${field} isn't true or false.`);
   return value;
+}
+
+function readChallenge(value: unknown): ChallengeRun | null {
+  if (value === null) return null;
+  const c = object(value, "challenge");
+  const id = c.id;
+  if (typeof id !== "string" || !CHALLENGES.some((known) => known.id === id)) fail("The save's challenge isn't one the game knows.");
+  const outcome = c.outcome;
+  if (outcome !== "running" && outcome !== "won" && outcome !== "failed") fail("Part of the save is broken: challenge.outcome isn't valid.");
+  const holds = (CHALLENGES.find((known) => known.id === id) as Challenge).holds.length;
+  const lapses = array(c.lapses, "challenge.lapses").map((v, i) => wholeNumber(v, `challenge.lapses.${i}`));
+  if (lapses.length !== holds) fail("Part of the save is broken: challenge.lapses doesn't match the challenge.");
+  return {
+    id: id as ChallengeId,
+    startTick: wholeNumber(c.startTick, "challenge.startTick"),
+    downlinkedAtStart: amount(c.downlinkedAtStart, "challenge.downlinkedAtStart"),
+    lapses,
+    outcome,
+    endedTick: c.endedTick === null ? null : wholeNumber(c.endedTick, "challenge.endedTick"),
+    failedBecause:
+      c.failedBecause === null || typeof c.failedBecause === "string"
+        ? c.failedBecause
+        : fail("Part of the save is broken: challenge.failedBecause isn't text."),
+  };
 }
 
 function readAir(value: unknown, field: string): Air {

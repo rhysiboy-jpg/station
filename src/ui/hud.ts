@@ -1,6 +1,12 @@
 // HTML panels: station status (time, orbit, totals) and the module inspector.
+import { patch } from "./patch";
 import {
   AIR_LIMITS,
+  levelAbove,
+  levelBelow,
+  worseLevel,
+  WATER_LOW_FRACTION,
+  type Level,
   BATTERY_FLOORS,
   failureOf,
   dataOf,
@@ -57,7 +63,10 @@ export function renderStatus(station: Station): void {
     balance.textContent = !power.powered ? "No power" : !power.supplied ? `Shedding · ${net}` : net;
     balance.className = !power.powered ? "bad" : !power.supplied || power.balance < 0 ? "warn" : "good";
   }
-  text("power-flow", `${kw(power.production)} / ${kw(power.draw)}${power.draw < power.demand ? ` of ${kw(power.demand)}` : ""}`);
+  text(
+    "power-flow",
+    `${power.production.toFixed(1)} / ${power.draw.toFixed(1)}${power.draw < power.demand ? ` of ${power.demand.toFixed(1)}` : ""} kW`,
+  );
   const charge = power.capacity > 0 ? power.stored / power.capacity : 0;
   text(
     "power-stored",
@@ -87,11 +96,13 @@ export function renderStatus(station: Station): void {
   else {
     const o2 = Math.min(...airs.map((a) => a.o2));
     const co2 = Math.max(...airs.map((a) => a.co2));
-    const level = Math.max(levelOf(AIR_LIMITS.o2, o2, true), levelOf(AIR_LIMITS.co2, co2, false)) as 0 | 1 | 2;
-    status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)} kPa`, LEVEL_CLASS[level]);
+    const level = worseLevel(levelBelow(o2, AIR_LIMITS.o2), levelAbove(co2, AIR_LIMITS.co2));
+    status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)}`, LEVEL_CLASS[level]);
   }
+  text("air-oxygen", `${life.oxygen.toFixed(1)} kg`);
   const water = life.water;
-  const waterLevel: 0 | 1 | 2 = water.capacity === 0 ? 0 : water.stored === 0 ? 2 : water.stored < water.capacity * 0.25 ? 1 : 0;
+  const waterLevel: Level =
+    water.capacity === 0 ? "ok" : water.stored === 0 ? "red" : water.stored < water.capacity * WATER_LOW_FRACTION ? "yellow" : "ok";
   status(
     "water-total",
     water.capacity > 0 ? `${water.stored.toFixed(1)} / ${water.capacity.toFixed(0)} kg` : "no tanks",
@@ -100,15 +111,15 @@ export function renderStatus(station: Station): void {
 
   const heat = heatOf(station);
   const hottest = Math.max(...Object.values(heat.modules).map((h) => h.temperature));
-  status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, hottest, false)]);
+  status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelAbove(hottest, TEMPERATURE_LIMITS)]);
   const load = heat.networks.reduce((sum, n) => sum + n.load, 0);
   const capacity = heat.networks.reduce((sum, n) => sum + n.capacity, 0);
-  status("heat-loop", `${kw(load)} made / ${kw(capacity)} rejected`, load > capacity ? "warn" : "good");
+  status("heat-loop", `${load.toFixed(1)} / ${capacity.toFixed(1)} kW`, load > capacity ? "warn" : "good");
 
   const data = dataOf(station);
   status(
     "data-flow",
-    `${data.produced.toFixed(1)} made · ${Math.min(data.downlink, data.produced + data.stored).toFixed(1)} sent GB/h`,
+    `${data.produced.toFixed(1)} / ${Math.min(data.downlink, data.produced + data.stored).toFixed(1)} GB/h`,
     data.produced === 0 && data.downlink === 0 ? "muted" : data.produced > data.downlink ? "warn" : "good",
   );
   const filling = data.capacity > 0 && data.stored >= data.capacity * 0.95;
@@ -185,13 +196,9 @@ export function renderAlerts(station: Station, actions: AlertActions): void {
   }
 }
 
-const LEVEL_CLASS: Record<0 | 1 | 2, string> = { 0: "good", 1: "warn", 2: "bad" };
+/** The CSS class for each warning level. */
+const LEVEL_CLASS: Record<Level, string> = { ok: "good", yellow: "warn", red: "bad" };
 
-/** 0 fine, 1 yellow, 2 red. `low` means falling below the limits is the danger. */
-function levelOf(limits: { yellow: number; red: number }, value: number, low: boolean): 0 | 1 | 2 {
-  if (low) return value < limits.red ? 2 : value < limits.yellow ? 1 : 0;
-  return value >= limits.red ? 2 : value >= limits.yellow ? 1 : 0;
-}
 
 function status(id: string, value: string, className: string): void {
   text(id, value);
@@ -236,7 +243,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     html.push(`</dl>`);
   }
   if (power) {
-    html.push(`<h3>Power</h3><dl class="totals">`);
+    html.push(`<h3 class="net power">Power</h3><dl class="totals">`);
     const status = power.offline
       ? `<dd class="bad">Offline</dd>`
       : !power.powered
@@ -254,18 +261,20 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   const life = lifeSupportOf(station);
   const air = life.modules[module.id];
   if (air) {
-    const room = life.beds - life.crew;
-    html.push(`<h3>Crew and air</h3><dl class="totals">`);
+    const bedsFree = life.beds - life.crew;
+    const roomFree = type.maxCrew - module.crew;
+    const blocked = life.beds === 0 ? "Build a habitat first" : bedsFree <= 0 ? "All beds taken" : roomFree <= 0 ? "No room left in this module" : "";
+    html.push(`<h3 class="net air">Crew and air</h3><dl class="totals">`);
     html.push(
       `<dt>Crew</dt><dd><span class="crew-control">` +
         `<button type="button" data-crew="-1" ${module.crew === 0 ? "disabled" : ""} aria-label="One fewer crew">−</button>` +
-        `${module.crew}` +
-        `<button type="button" data-crew="1" ${room <= 0 ? "disabled" : ""} aria-label="One more crew" title="${room <= 0 ? (life.beds === 0 ? "Build a habitat first" : "All beds taken") : `${room} bed${room === 1 ? "" : "s"} free`}">+</button>` +
+        `${module.crew} / ${type.maxCrew}` +
+        `<button type="button" data-crew="1" ${blocked ? "disabled" : ""} aria-label="One more crew" title="${blocked || `${bedsFree} bed${bedsFree === 1 ? "" : "s"} free on the station`}">+</button>` +
         `</span></dd>`,
     );
     if (type.beds > 0) html.push(`<dt>Beds</dt><dd>${type.beds}</dd>`);
-    html.push(`<dt>O₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.o2, air.o2, true)]}">${air.o2.toFixed(2)} kPa</dd>`);
-    html.push(`<dt>CO₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.co2, air.co2, false)]}">${air.co2.toFixed(2)} kPa</dd>`);
+    html.push(`<dt>O₂</dt><dd class="${LEVEL_CLASS[levelBelow(air.o2, AIR_LIMITS.o2)]}">${air.o2.toFixed(2)} kPa</dd>`);
+    html.push(`<dt>CO₂</dt><dd class="${LEVEL_CLASS[levelAbove(air.co2, AIR_LIMITS.co2)]}">${air.co2.toFixed(2)} kPa</dd>`);
     const network = life.water.networks.find((n) => n.moduleIds.includes(module.id));
     if (network) {
       html.push(
@@ -278,9 +287,9 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   const heatReport = heatOf(station);
   const heat = heatReport.modules[module.id];
   if (heat) {
-    html.push(`<h3>Heat</h3><dl class="totals">`);
+    html.push(`<h3 class="net heat">Heat</h3><dl class="totals">`);
     html.push(
-      `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, heat.temperature, false)]}">${heat.temperature.toFixed(1)} °C</dd>`,
+      `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelAbove(heat.temperature, TEMPERATURE_LIMITS)]}">${heat.temperature.toFixed(1)} °C</dd>`,
     );
     html.push(`<dt>Makes</dt><dd>${kw(heat.made)}</dd>`);
     html.push(`<dt>Cooling takes</dt><dd>${kw(heat.removed)}</dd>`);
@@ -289,14 +298,14 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
     }
     html.push(`</dl>`);
   }
-  // Joints: what each connection to a neighbour carries, against its capacity.
-  const powerJoints = powerOf(station).joints.filter((j) => j.a === module.id || j.b === module.id);
-  if (powerJoints.length > 0) {
-    html.push(`<h3>Joints</h3><dl class="totals">`);
-    for (const pj of powerJoints) {
+  // Connections: what each connection to a neighbour carries, against its capacity.
+  const powerConnections = powerOf(station).connections.filter((j) => j.a === module.id || j.b === module.id);
+  if (powerConnections.length > 0) {
+    html.push(`<h3>Connections</h3><dl class="totals">`);
+    for (const pj of powerConnections) {
       const other = pj.a === module.id ? pj.b : pj.a;
       const otherModule = station.modules.find((m) => m.id === other);
-      const hj = heatReport.joints.find((h) => (h.a === pj.a && h.b === pj.b) || (h.a === pj.b && h.b === pj.a));
+      const hj = heatReport.connections.find((h) => (h.a === pj.a && h.b === pj.b) || (h.a === pj.b && h.b === pj.a));
       const part = (flow: number, capacity: number, bottleneck: boolean, unit: string) =>
         `<span class="${bottleneck ? "bad" : Math.abs(flow) >= capacity * 0.75 ? "warn" : ""}">${Math.abs(flow).toFixed(1)}/${capacity} ${unit}</span>`;
       html.push(
@@ -312,7 +321,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
 
   const data = dataOf(station).modules[module.id];
   if (data && (data.produced > 0 || data.racksUntended > 0 || data.capacity > 0 || data.downlink > 0)) {
-    html.push(`<h3>Data</h3><dl class="totals">`);
+    html.push(`<h3 class="net data">Data</h3><dl class="totals">`);
     if (data.racksWorking + data.racksUntended > 0) {
       html.push(`<dt>Racks</dt><dd class="${data.racksUntended > 0 ? "warn" : ""}">${data.racksWorking} of ${data.racksWorking + data.racksUntended} tended</dd>`);
       if (data.racksUntended > 0) {
@@ -390,42 +399,6 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   }
 }
 
-/**
- * Brings `target`'s children in line with `source`'s if both have the same
- * shape (same elements in the same places), changing only text and attributes.
- * Returns false, changing nothing, if the shapes differ.
- */
-function patch(target: Node, source: Node): boolean {
-  if (!sameShape(target, source)) return false;
-  sync(target, source);
-  return true;
-}
-
-function sameShape(a: Node, b: Node): boolean {
-  if (a.childNodes.length !== b.childNodes.length) return false;
-  for (let i = 0; i < a.childNodes.length; i++) {
-    const x = a.childNodes[i] as Node;
-    const y = b.childNodes[i] as Node;
-    if (x.nodeName !== y.nodeName || !sameShape(x, y)) return false;
-  }
-  return true;
-}
-
-function sync(target: Node, source: Node): void {
-  target.childNodes.forEach((child, i) => {
-    const from = source.childNodes[i] as Node;
-    if (child.nodeType === Node.TEXT_NODE) {
-      if (child.textContent !== from.textContent) child.textContent = from.textContent;
-    } else if (child instanceof Element && from instanceof Element) {
-      for (const attr of Array.from(child.attributes)) if (!from.hasAttribute(attr.name)) child.removeAttribute(attr.name);
-      for (const attr of Array.from(from.attributes)) {
-        if (child.getAttribute(attr.name) !== attr.value) child.setAttribute(attr.name, attr.value);
-      }
-      sync(child, from);
-    }
-  });
-}
-
 /** Priority tier and, when shed, why it has stopped. Zero-draw equipment never needs power. */
 function equipmentNote(equipment: EquipmentTypeId, power: ModulePower | undefined, running: boolean | undefined): string {
   const type = EQUIPMENT_TYPES[equipment];
@@ -446,7 +419,7 @@ function shedText(reason: ShedReason | undefined): string {
     case "waiting-for-full-battery":
       return "waiting for full battery";
     case "bottleneck":
-      return "a joint on the way is full";
+      return "a connection on the way is full";
     default:
       return "no power";
   }

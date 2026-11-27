@@ -220,3 +220,55 @@ describe("difficulty", () => {
     expect(powerOf(station).modules[3]).toBeDefined();
   });
 });
+
+describe("undo after a failure", () => {
+  it("is refused once the station is abandoned", () => {
+    const abandoned = { ...run(createStation(), habitat, crew(2, 4)), abandoned: true, abandonedBecause: "water" as const };
+
+    expect(applyCommand(abandoned, { type: "undo" })).toMatchObject({ ok: false, reason: "abandoned" });
+  });
+
+  it("is refused if it would put crew back into a module that is offline now", () => {
+    // Crew go into the life support module, then a later build change; the module
+    // overheats and goes offline, moving its crew out. Undoing the build change
+    // would restore the layout from when the crew were still in it.
+    const start = run(hotLifeSupport(), crew(4, 2), slot(3, 0, "lab-rack"));
+    const offline = advance(advanceUntil(start, isOffline(4), TICKS_PER_ORBIT * 3), 1);
+
+    expect(lifeSupportOf(offline).modules[4]?.crew).toBe(0);
+    expect(applyCommand(offline, { type: "undo" })).toMatchObject({ ok: false, reason: "offline" });
+  });
+
+  it("still works when nothing it restores is affected", () => {
+    const offline = advance(advanceUntil(run(hotLifeSupport(), slot(3, 0, "lab-rack")), isOffline(4), TICKS_PER_ORBIT * 3), 1);
+    const undone = applyCommand(offline, { type: "undo" });
+
+    expect(undone.ok).toBe(true);
+    expect(undone.ok && undone.station.modules.find((m) => m.id === 3)?.slots[0]).toBeNull();
+  });
+});
+
+describe("evacuating into modules with room", () => {
+  const secondHabitat: Command = { type: "place", module: "habitat", position: { x: -1, y: -3 }, rotation: 180 };
+
+  it("fills the nearest fit module up to its room, then the next", () => {
+    // The habitat (room 6) already holds 5; the 2 leaving the overheating life
+    // support module split: 1 into the habitat, 1 on to the core node beyond it.
+    const start = run(hotLifeSupport(), secondHabitat, crew(4, 2), crew(3, 5));
+    const after = advance(advanceUntil(start, isOffline(4), TICKS_PER_ORBIT * 3), 1);
+
+    expect(lifeSupportOf(after).modules[3]?.crew).toBe(6);
+    expect(lifeSupportOf(after).modules[1]?.crew).toBe(1);
+    expect(failureOf(after).abandoned).toBe(false);
+  });
+
+  it("abandons the station when fit modules have no room for everyone", () => {
+    // 4 crew in a red-hot habitat; the only neighbour, the core node, is fine but holds 2.
+    const hot = { ...run(createStation(), habitat, crew(2, 4)), temperature: { 2: 45 } };
+    const after = advanceUntil(hot, (s) => failureOf(s).abandoned, OFFLINE_AFTER_TICKS + 5);
+
+    // The core node was fit (only its power warning is red, which never bars crew), just full.
+    expect(failureOf(after).abandonedBecause).toBe("room");
+    expect(lifeSupportOf(after).crew).toBe(0);
+  });
+});

@@ -1,4 +1,4 @@
-// A small max-flow solver for routing resources through joints (connection
+// A small max-flow solver for routing resources through connections (connection
 // bottlenecks). Station graphs are tiny, so plain Edmonds-Karp is plenty; it
 // is deterministic because every search visits arcs in the order they were added.
 
@@ -24,8 +24,8 @@ export class FlowGraph {
     return this.add(from, to, capacity, 0);
   }
 
-  /** A two-way link that carries at most `capacity` in either direction (net). */
-  addLink(a: number, b: number, capacity: number): ArcHandle {
+  /** A two-way pair of arcs that carries at most `capacity` in either direction (net). */
+  addTwoWay(a: number, b: number, capacity: number): ArcHandle {
     return this.add(a, b, capacity, capacity);
   }
 
@@ -37,7 +37,7 @@ export class FlowGraph {
     return { node: from, index: fromArcs.length - 1 };
   }
 
-  /** Net flow along an arc or link, in its added direction (negative: the other way). */
+  /** Net flow along an arc or two-way pair, in its added direction (negative: the other way). */
   flow(handle: ArcHandle): number {
     return this.arc(handle).flow;
   }
@@ -166,4 +166,34 @@ export class FlowGraph {
 export interface ArcHandle {
   node: number;
   index: number;
+}
+
+/** Something joining two nodes with a capacity, such as a connection between modules. */
+export interface Limited<Id> {
+  a: Id;
+  b: Id;
+  capacity: number;
+}
+
+/** Adds a two-way pair for each limit, mapping its ends to graph nodes. Returns the handles in order. */
+export function addLimits<Id>(graph: FlowGraph, limits: Limited<Id>[], nodeOf: (id: Id) => number): ArcHandle[] {
+  return limits.map((l) => graph.addTwoWay(nodeOf(l.a), nodeOf(l.b), l.capacity));
+}
+
+/**
+ * Each limit's flow, and whether it lies on the cut between what the source
+ * can still reach and what it can't: the limits holding flow back.
+ */
+export function limitFlows<Id, L extends Limited<Id>>(
+  graph: FlowGraph,
+  limits: L[],
+  handles: ArcHandle[],
+  nodeOf: (id: Id) => number,
+  reach: Set<number> | undefined,
+): (L & { flow: number; onCut: boolean })[] {
+  return limits.map((l, i) => ({
+    ...l,
+    flow: graph.flow(handles[i] as ArcHandle),
+    onCut: reach !== undefined && reach.has(nodeOf(l.a)) !== reach.has(nodeOf(l.b)),
+  }));
 }

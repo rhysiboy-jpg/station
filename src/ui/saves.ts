@@ -61,3 +61,52 @@ export async function importStation(file: File): Promise<LoadResult> {
   }
   return loadStation(text);
 }
+
+export interface SaveControlActions {
+  current(): Station;
+  /** Swap in an imported station. */
+  replace(station: Station): void;
+  say(text: string, bad?: boolean): void;
+}
+
+/**
+ * Wires the Export and Import buttons, and autosaves every few seconds while
+ * the station changes and whenever the tab is hidden or closed.
+ */
+export function bindSaveControls(actions: SaveControlActions): { saveNow(): void } {
+  let autosaved: Station | undefined;
+  const saveNow = () => {
+    const station = actions.current();
+    if (station === autosaved) return;
+    const ok = writeAutosave(station);
+    autosaved = station;
+    const note = document.getElementById("save-state");
+    if (note) note.textContent = ok ? "Autosaves in this browser." : "Can't autosave here (browser storage is off). Export to keep your station.";
+  };
+
+  document.getElementById("export-station")?.addEventListener("click", () => {
+    exportStation(actions.current());
+    actions.say("Station exported.");
+  });
+  const file = document.getElementById("import-file") as HTMLInputElement;
+  document.getElementById("import-station")?.addEventListener("click", () => file.click());
+  file.addEventListener("change", async () => {
+    const chosen = file.files?.[0];
+    file.value = "";
+    if (!chosen) return;
+    const result = await importStation(chosen);
+    if (!result.ok) {
+      actions.say(`Couldn't import ${chosen.name}: ${result.message}`, true);
+      return;
+    }
+    actions.replace(result.station);
+    actions.say(`Imported ${chosen.name}.`);
+  });
+
+  setInterval(saveNow, 5000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveNow();
+  });
+  window.addEventListener("pagehide", saveNow);
+  return { saveNow };
+}

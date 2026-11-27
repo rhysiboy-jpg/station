@@ -27,7 +27,7 @@ export interface ModuleType {
   /** Power the module's own systems draw (lights, fans, avionics), in kW. */
   draw: number;
   /**
-   * What each of its ports can carry. A joint carries the lower of its two
+   * What each of its ports can carry. A connection carries the lower of its two
    * modules' ratings. Power and heat in kW; air is the fan exchange in m³/s.
    */
   capacity: { power: number; heat: number; air: number };
@@ -37,6 +37,8 @@ export interface ModuleType {
   waterTank: number;
   /** Crew it can sleep. Total beds cap the station's headcount. */
   beds: number;
+  /** Crew it has room for at once, working or sheltering. Zero for unpressurised modules. */
+  maxCrew: number;
   /**
    * Heat needed to warm it by 1 °C, in kJ. Bigger is slower to heat up. About
    * 300 kJ/°C per cell: far below a real module's (around 10 MJ/°C), so that
@@ -69,6 +71,7 @@ export const MODULE_TYPES = {
     volume: 20,
     waterTank: 0,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 300,
   },
   corridor: {
@@ -91,6 +94,7 @@ export const MODULE_TYPES = {
     volume: 30,
     waterTank: 0,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 900,
   },
   habitat: {
@@ -113,6 +117,7 @@ export const MODULE_TYPES = {
     volume: 120,
     waterTank: 5,
     beds: 4,
+    maxCrew: 6,
     heatCapacity: 1800,
   },
   "life-support": {
@@ -135,6 +140,7 @@ export const MODULE_TYPES = {
     volume: 40,
     waterTank: 10,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 600,
   },
   lab: {
@@ -157,6 +163,7 @@ export const MODULE_TYPES = {
     volume: 75,
     waterTank: 0,
     beds: 0,
+    maxCrew: 4,
     heatCapacity: 1200,
   },
   truss: {
@@ -183,6 +190,7 @@ export const MODULE_TYPES = {
     volume: 0,
     waterTank: 0,
     beds: 0,
+    maxCrew: 0,
     heatCapacity: 900,
   },
 } as const satisfies Record<string, ModuleType>;
@@ -308,7 +316,7 @@ export const NOMINAL_TEMPERATURE = 21;
 /** Temperature limits, in °C. Used by warnings (#10). */
 export const TEMPERATURE_LIMITS = { yellow: 27, red: 32 };
 
-/** Heat leaking through each joint between attached modules, in kW per °C of difference. */
+/** Heat leaking through each connection between attached modules, in kW per °C of difference. */
 export const HEAT_LEAK_KW_PER_C = 0.05;
 
 /** How quickly a loop with spare capacity pulls a warm module back to the set point, in seconds. */
@@ -334,3 +342,95 @@ export const DIFFICULTIES: Record<Difficulty, { name: string; offlineCutsNetwork
 
 /** Lab racks one crew member can tend. Untended racks idle. */
 export const RACKS_PER_CREW = 2;
+
+/** Something that must stay true for a challenge's whole length. */
+export type Hold =
+  /** At least this many crew aboard. */
+  | { kind: "crew"; atLeast: number }
+  /** At least this many lab racks working (powered and tended). */
+  | { kind: "racks"; atLeast: number }
+  /** Every module below this temperature, in °C. */
+  | { kind: "coolerThan"; celsius: number };
+
+/** Something to reach before a challenge's time runs out. */
+export type Goal =
+  /** GB sent to Earth since the challenge began. */
+  { kind: "downlinked"; atLeast: number };
+
+export interface Challenge {
+  id: string;
+  name: string;
+  /** One line for the picker. */
+  brief: string;
+  /** How long it runs, in orbits. */
+  orbits: number;
+  holds: Hold[];
+  goals: Goal[];
+}
+
+/**
+ * Challenges as data. A challenge with only holds is won by keeping them for
+ * its length; one with goals is won as soon as they are met, or failed when
+ * time runs out. Each leans on a different system.
+ */
+export const CHALLENGES = [
+  {
+    id: "shakedown",
+    name: "Shakedown",
+    brief: "Keep 2 crew aboard for 3 orbits.",
+    orbits: 3,
+    holds: [{ kind: "crew", atLeast: 2 }],
+    goals: [],
+  },
+  {
+    id: "night-shift",
+    name: "Night shift",
+    brief: "Keep 4 lab racks working for 3 orbits, eclipse included. Mind the battery floors.",
+    orbits: 3,
+    holds: [{ kind: "racks", atLeast: 4 }],
+    goals: [],
+  },
+  {
+    id: "cool-running",
+    name: "Cool running",
+    brief: "Keep 6 lab racks working with every module below 27 °C for 3 orbits.",
+    orbits: 3,
+    holds: [
+      { kind: "racks", atLeast: 6 },
+      { kind: "coolerThan", celsius: 27 },
+    ],
+    goals: [],
+  },
+  {
+    id: "science-return",
+    name: "Science return",
+    brief: "Send 30 GB of data to Earth within 8 orbits.",
+    orbits: 8,
+    holds: [],
+    goals: [{ kind: "downlinked", atLeast: 30 }],
+  },
+  {
+    id: "long-haul",
+    name: "Long haul",
+    brief: "Keep 6 crew aboard for 10 orbits. Water will run short without recycling.",
+    orbits: 10,
+    holds: [{ kind: "crew", atLeast: 6 }],
+    goals: [],
+  },
+  {
+    id: "station-keeping",
+    name: "Station keeping",
+    brief: "Keep 6 crew aboard and 8 lab racks working through 10 orbits.",
+    orbits: 10,
+    holds: [
+      { kind: "crew", atLeast: 6 },
+      { kind: "racks", atLeast: 8 },
+    ],
+    goals: [],
+  },
+] as const satisfies readonly Challenge[];
+
+export type ChallengeId = (typeof CHALLENGES)[number]["id"];
+
+/** A hold may lapse this long before the challenge fails: the same quarter orbit a red module gets. */
+export const CHALLENGE_LAPSE_TICKS = OFFLINE_AFTER_TICKS;

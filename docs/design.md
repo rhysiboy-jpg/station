@@ -43,11 +43,11 @@ Only **pressurised** modules join the air network. Unlike the other resources, a
 
 ### Data
 
-Lab racks make data only while powered and tended: each crew member tends two racks, so a full four-rack lab needs two crew. Data storage holds it and antennas send it to Earth, both needing power. Whatever has nowhere to go is lost and counted. Data has no limit at joints, like water. Ground contact is constant in the prototype; contact windows for part of each orbit come with the full game.
+Lab racks make data only while powered and tended: each crew member tends two racks, so a full four-rack lab needs two crew. Data storage holds it and antennas send it to Earth, both needing power. Whatever has nowhere to go is lost and counted. Data has no limit at connections, like water. Ground contact is constant in the prototype; contact windows for part of each orbit come with the full game.
 
 ### Bottlenecks
 
-Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every joint filled by how much of it is in use, with bottlenecks in red. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
+Each **connection** carries only so much: the lower of its two modules' port ratings. Truss is the trunk (15 kW of power, 10 kW of heat), corridors are narrow (6 kW, 4 kW), and the other modules sit in between (8 to 12 kW, 6 to 8 kW). Power and heat are routed through those limits, so a station with power to spare can still leave modules short if everything funnels through one corridor, and radiators can't cool modules whose heat can't reach them. The power and heat overlays draw every connection filled by how much of it is in use, with bottlenecks in red; the Limits overlay (B) shows every connection at its busiest across power and heat, tags each bottleneck with what it limits (P, H), and marks modules left short of power. Air connections are fans that swap air by difference in concentration, so they never fill up and aren't shown. Water pipes have no limit ([ADR 0003](adr/0003-shared-networks-not-routed-conduits.md)).
 
 ### Power shortages
 
@@ -55,7 +55,7 @@ When a power network can't meet demand, equipment is **shed** in priority tiers,
 
 ### Reference figures (starting points, to be tuned)
 
-Approximate real-world values to start balancing from. Every deviation goes in a "balance changes" list in this document.
+Approximate real-world values to start balancing from. Every deviation goes in a "balance changes" list in this document. The rules new parts follow (units, resources, module and equipment rules) are in [content-rules.md](content-rules.md).
 
 - Oxygen: about 0.84 kg per person per day. CO2 produced: about 1 kg per person per day.
 - Water: roughly 3 kg per person per day for drinking and food, before hygiene.
@@ -75,16 +75,17 @@ Every place the game departs from the reference figures, and why.
 
 ## Crew
 
-The first version uses an abstract **headcount** per module: modules need N crew and crew need air, water and a habitat. Individual crew who walk around, with needs and repair jobs, come later.
+The first version uses an abstract **headcount** per module: modules need N crew and crew need air, water and a habitat. Total crew is capped by habitat beds, and each module has room for a set number at once (habitat 6, lab 4, core node, corridor and life support module 2 each), which also limits where evacuated crew can go. Individual crew who walk around, with needs and repair jobs, come later.
 
 ## Failure
 
+- Removing a module is instant and free, but refused while it has crew aboard or if the habitats left couldn't sleep everyone; move or reduce the crew first, so removal never strands anyone.
 - Each module has thresholds for temperature, air (O2 and CO2), water and power. Crossing them raises a **yellow** then a **red** warning, and every current warning is listed in the alerts list.
-- A module that stays red for a quarter orbit (about 30 s at 1x) goes **offline**. A countdown shows how long is left, and dropping back below red calls it off. While offline it makes, uses and stores nothing, and its crew move to the nearest reachable module that is online with nothing in red.
+- A module that stays red for a quarter orbit (about 30 s at 1x) goes **offline**. A countdown shows how long is left, and dropping back below red calls it off. While offline it makes, uses and stores nothing, and its crew move to the nearest reachable modules that are online with nothing in red, filling each up to its room. If they don't all fit, the station is abandoned.
 - Some conditions only count with crew aboard. Temperature always counts. Air and water only count when the module has crew, because they only harm people: an empty module with stale air shows a warning but doesn't count down.
 - Power never takes a module offline by itself. A dark module is a red warning, and the harm comes through its effects: scrubbers stop, radiators stop.
 - An offline module recovers automatically once every reading that counts is back below yellow. Repairs needing crew or spare parts come with the full game.
-- **Difficulty** decides what an offline module does to the networks it sits on. On **Standard** its hull still carries power, heat, air and water through to the modules beyond. On **Hard** it cuts them, splitting the station.
+- **Difficulty** ([ADR 0006](adr/0006-difficulty-decides-what-offline-modules-cut.md)) decides what an offline module does to the networks it sits on. On **Standard** its hull still carries power, heat, air and water through to the modules beyond. On **Hard** it cuts them, splitting the station.
 - The station is **abandoned**, the only game over, when crew must leave a module and nowhere fit is reachable. The banner says what drove them out.
 
 ## Campaign (direction only, detail deferred)
@@ -108,7 +109,7 @@ The first milestone is a sandbox that answers one question: is the layout puzzle
 - **Modules (6):** core node (ports on all four sides), habitat, life support module, lab, truss segment, corridor.
 - **Equipment (8):** solar panel, radiator, battery, oxygen generator / CO2 scrubber, water recycler, lab rack, antenna, data storage.
 - Day and night, heat, failures and warnings. Constant ground contact (contact windows come later).
-- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits".
+- A few **challenges**, for example "keep 6 crew alive and 2 labs running through 10 orbits". Built as six: Shakedown, Night shift, Cool running, Science return, Long haul and Station keeping. A challenge starts from the station as it stands. Its **holds** (crew aboard, lab racks working, every module below a temperature) must stay true for its length, with a quarter-orbit grace for lapses; its **goals** (data sent to Earth) must be met before time runs out. Abandoning the station fails it.
 - Screen: build palette, overlay toggles for each network, module inspector, time controls, alerts list, day/night and contact indicator.
 - Autosaves in the browser, with export and import of save files to share layouts. Saves are versioned JSON checked in full on load, so a broken or hand-edited file is refused with a message. Undo history isn't saved.
 - Published to GitHub Pages on each update.
