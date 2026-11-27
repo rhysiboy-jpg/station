@@ -220,3 +220,30 @@ describe("difficulty", () => {
     expect(powerOf(station).modules[3]).toBeDefined();
   });
 });
+
+describe("undo after a failure", () => {
+  it("is refused once the station is abandoned", () => {
+    const abandoned = { ...run(createStation(), habitat, crew(2, 4)), abandoned: true, abandonedBecause: "water" as const };
+
+    expect(applyCommand(abandoned, { type: "undo" })).toMatchObject({ ok: false, reason: "abandoned" });
+  });
+
+  it("is refused if it would put crew back into a module that is offline now", () => {
+    // Crew go into the life support module, then a later build change; the module
+    // overheats and goes offline, moving its crew out. Undoing the build change
+    // would restore the layout from when the crew were still in it.
+    const start = run(hotLifeSupport(), crew(4, 2), slot(3, 0, "lab-rack"));
+    const offline = advance(advanceUntil(start, isOffline(4), TICKS_PER_ORBIT * 3), 1);
+
+    expect(lifeSupportOf(offline).modules[4]?.crew).toBe(0);
+    expect(applyCommand(offline, { type: "undo" })).toMatchObject({ ok: false, reason: "offline" });
+  });
+
+  it("still works when nothing it restores is affected", () => {
+    const offline = advance(advanceUntil(run(hotLifeSupport(), slot(3, 0, "lab-rack")), isOffline(4), TICKS_PER_ORBIT * 3), 1);
+    const undone = applyCommand(offline, { type: "undo" });
+
+    expect(undone.ok).toBe(true);
+    expect(undone.ok && undone.station.modules.find((m) => m.id === 3)?.slots[0]).toBeNull();
+  });
+});

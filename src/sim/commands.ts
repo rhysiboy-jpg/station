@@ -122,6 +122,19 @@ function undo(station: Station): CommandResult {
   if (!previous) {
     return { ok: false, reason: "nothing-to-undo", message: "Nothing to undo." };
   }
+  // Undo rewinds the layout, not time: it can't bring crew back after the
+  // station is abandoned, or put them back into a module that has since failed.
+  if (station.abandoned) {
+    return { ok: false, reason: "abandoned", message: "The station has been abandoned. Undo can't bring the crew back." };
+  }
+  const intoOffline = previous.find((m) => m.crew > 0 && isOffline(station, m.id));
+  if (intoOffline) {
+    return {
+      ok: false,
+      reason: "offline",
+      message: `Undoing that would put crew back into the ${MODULE_TYPES[intoOffline.type].name.toLowerCase()}, which is offline.`,
+    };
+  }
   return {
     ok: true,
     station: { ...station, modules: previous, history: station.history.slice(0, -1) },
