@@ -2,6 +2,11 @@
 import { patch } from "./patch";
 import {
   AIR_LIMITS,
+  levelAbove,
+  levelBelow,
+  worseLevel,
+  WATER_LOW_FRACTION,
+  type Level,
   BATTERY_FLOORS,
   failureOf,
   dataOf,
@@ -91,12 +96,13 @@ export function renderStatus(station: Station): void {
   else {
     const o2 = Math.min(...airs.map((a) => a.o2));
     const co2 = Math.max(...airs.map((a) => a.co2));
-    const level = Math.max(levelOf(AIR_LIMITS.o2, o2, true), levelOf(AIR_LIMITS.co2, co2, false)) as 0 | 1 | 2;
+    const level = worseLevel(levelBelow(o2, AIR_LIMITS.o2), levelAbove(co2, AIR_LIMITS.co2));
     status("air-worst", `O₂ ${o2.toFixed(1)} · CO₂ ${co2.toFixed(2)}`, LEVEL_CLASS[level]);
   }
   text("air-oxygen", `${life.oxygen.toFixed(1)} kg`);
   const water = life.water;
-  const waterLevel: 0 | 1 | 2 = water.capacity === 0 ? 0 : water.stored === 0 ? 2 : water.stored < water.capacity * 0.25 ? 1 : 0;
+  const waterLevel: Level =
+    water.capacity === 0 ? "ok" : water.stored === 0 ? "red" : water.stored < water.capacity * WATER_LOW_FRACTION ? "yellow" : "ok";
   status(
     "water-total",
     water.capacity > 0 ? `${water.stored.toFixed(1)} / ${water.capacity.toFixed(0)} kg` : "no tanks",
@@ -105,7 +111,7 @@ export function renderStatus(station: Station): void {
 
   const heat = heatOf(station);
   const hottest = Math.max(...Object.values(heat.modules).map((h) => h.temperature));
-  status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, hottest, false)]);
+  status("heat-worst", `${hottest.toFixed(1)} °C`, LEVEL_CLASS[levelAbove(hottest, TEMPERATURE_LIMITS)]);
   const load = heat.networks.reduce((sum, n) => sum + n.load, 0);
   const capacity = heat.networks.reduce((sum, n) => sum + n.capacity, 0);
   status("heat-loop", `${load.toFixed(1)} / ${capacity.toFixed(1)} kW`, load > capacity ? "warn" : "good");
@@ -190,13 +196,9 @@ export function renderAlerts(station: Station, actions: AlertActions): void {
   }
 }
 
-const LEVEL_CLASS: Record<0 | 1 | 2, string> = { 0: "good", 1: "warn", 2: "bad" };
+/** The CSS class for each warning level. */
+const LEVEL_CLASS: Record<Level, string> = { ok: "good", yellow: "warn", red: "bad" };
 
-/** 0 fine, 1 yellow, 2 red. `low` means falling below the limits is the danger. */
-function levelOf(limits: { yellow: number; red: number }, value: number, low: boolean): 0 | 1 | 2 {
-  if (low) return value < limits.red ? 2 : value < limits.yellow ? 1 : 0;
-  return value >= limits.red ? 2 : value >= limits.yellow ? 1 : 0;
-}
 
 function status(id: string, value: string, className: string): void {
   text(id, value);
@@ -271,8 +273,8 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
         `</span></dd>`,
     );
     if (type.beds > 0) html.push(`<dt>Beds</dt><dd>${type.beds}</dd>`);
-    html.push(`<dt>O₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.o2, air.o2, true)]}">${air.o2.toFixed(2)} kPa</dd>`);
-    html.push(`<dt>CO₂</dt><dd class="${LEVEL_CLASS[levelOf(AIR_LIMITS.co2, air.co2, false)]}">${air.co2.toFixed(2)} kPa</dd>`);
+    html.push(`<dt>O₂</dt><dd class="${LEVEL_CLASS[levelBelow(air.o2, AIR_LIMITS.o2)]}">${air.o2.toFixed(2)} kPa</dd>`);
+    html.push(`<dt>CO₂</dt><dd class="${LEVEL_CLASS[levelAbove(air.co2, AIR_LIMITS.co2)]}">${air.co2.toFixed(2)} kPa</dd>`);
     const network = life.water.networks.find((n) => n.moduleIds.includes(module.id));
     if (network) {
       html.push(
@@ -287,7 +289,7 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   if (heat) {
     html.push(`<h3 class="net heat">Heat</h3><dl class="totals">`);
     html.push(
-      `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelOf(TEMPERATURE_LIMITS, heat.temperature, false)]}">${heat.temperature.toFixed(1)} °C</dd>`,
+      `<dt>Temperature</dt><dd class="${LEVEL_CLASS[levelAbove(heat.temperature, TEMPERATURE_LIMITS)]}">${heat.temperature.toFixed(1)} °C</dd>`,
     );
     html.push(`<dt>Makes</dt><dd>${kw(heat.made)}</dd>`);
     html.push(`<dt>Cooling takes</dt><dd>${kw(heat.removed)}</dd>`);

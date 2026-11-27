@@ -14,7 +14,7 @@ import {
   type Station,
 } from "../sim";
 import type { ConnectionOverlay, Overlay } from "./overlays";
-import { equipmentColour, palette } from "./palette";
+import { equipmentColour, levelColour, palette } from "./palette";
 
 /** Size of one grid cell in screen pixels. */
 export const CELL = 48;
@@ -72,7 +72,7 @@ export function drawStation(station: Station, options: StationDrawOptions = {}):
     const status = options.status?.[module.id];
     if ((options.overlay && !options.overlay.modules[module.id]) || status?.offline) body.alpha = 0.35;
     if (status && (status.offline || status.level !== "ok")) {
-      layer.addChild(drawStatusRing(module, status.offline ? palette.offline : status.level === "red" ? palette.danger : palette.warning));
+      layer.addChild(drawStatusRing(module, status.offline ? palette.offline : levelColour(status.level, palette.warning)));
     }
     layer.addChild(body);
     if (options.selected === module.id) layer.addChild(drawStatusRing(module, palette.selected, 7));

@@ -1,9 +1,9 @@
 // Power: solar panels make it in Day, batteries store it, everything powered draws it.
 // In a shortage, equipment is shed by priority (ADR 0004).
 import { BATTERY_FLOORS, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY, MODULE_TYPES, type Priority } from "./content";
-import { FlowGraph, type ArcHandle } from "./flow";
+import { addLimits, FlowGraph, limitFlows, type ArcHandle } from "./flow";
 import { connectionLimitsOf, networksOf, type ConnectionLimit, type Network } from "./networks";
-import { isOffline, type ModuleId, type PlacedModule, type Station } from "./station";
+import { isOffline, moduleById, type ModuleId, type PlacedModule, type Station } from "./station";
 import { orbitOf, SECONDS_PER_TICK } from "./time";
 
 const HOURS_PER_TICK = SECONDS_PER_TICK / 3600;
@@ -128,6 +128,12 @@ function solarOf(station: Station, module: PlacedModule, sunlit: boolean): numbe
   );
 }
 
+/** kWh held and the most it can hold, across some battery packs. */
+const packTotals = (packs: Pack[]) => ({
+  stored: packs.reduce((sum, p) => sum + p.charge, 0),
+  capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
+});
+
 const demandUpTo = (loads: Load[], upTo: RunningUpTo) =>
   loads.reduce((sum, l) => (l.priority <= upTo ? sum + l.kw : sum), 0);
 
@@ -184,9 +190,10 @@ const SINK = 1;
  * or full batteries, so equipment doesn't flicker as a battery gains charge.
  */
 function resolve(station: Station, network: Network, sunlit: boolean, findBottlenecks: boolean): Resolved {
-  const modules = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
+  const modules = network.moduleIds.map((id) => moduleById(station, id));
   const graph = new FlowGraph(modules.length + 2);
-  const nodeOf = new Map(modules.map((m, i) => [m.id, i + 2]));
+  const nodes = new Map(modules.map((m, i) => [m.id, i + 2]));
+  const nodeOf = (id: ModuleId) => nodes.get(id) as number;
 
   // A module new to a shedding network is held to the most shed of its members.
   const recorded = modules.flatMap((m) => {
@@ -195,20 +202,17 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
   });
   const fallback = Math.min(LOWEST_PRIORITY, ...recorded);
 
-  const connections = connectionLimitsOf(station, network, "power").map((connection) => ({
-    connection,
-    twoWay: graph.addTwoWay(nodeOf.get(connection.a) as number, nodeOf.get(connection.b) as number, connection.capacity),
-  }));
+  const limits = connectionLimitsOf(station, network, "power");
+  const handles = addLimits(graph, limits, nodeOf);
   const plans: ModulePlan[] = modules.map((module) => {
     const packs = packsOf(station, module);
     return {
       module,
-      node: nodeOf.get(module.id) as number,
+      node: nodeOf(module.id),
       loads: loadsOf(station, module),
       previous: station.powerRunningUpTo[module.id] ?? fallback,
       runningUpTo: 0,
-      stored: packs.reduce((sum, p) => sum + p.charge, 0),
-      capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
+      ...packTotals(packs),
       solar: solarOf(station, module, sunlit),
       // Placeholders; set below so every solar arc comes before any battery arc
       // and searches use sunlight first.
@@ -334,13 +338,10 @@ function resolve(station: Station, network: Network, sunlit: boolean, findBottle
     draw: plans.reduce((sum, p) => sum + demandUpTo(p.loads, p.runningUpTo), 0),
     stored,
     capacity,
-    connections: connections.map(({ connection, twoWay }) => {
-      const nodeA = nodeOf.get(connection.a) as number;
-      const nodeB = nodeOf.get(connection.b) as number;
-      const flow = graph.flow(twoWay);
-      const cut = reach !== undefined && reach.has(nodeA) !== reach.has(nodeB);
-      return { ...connection, flow, bottleneck: reachesModules && cut };
-    }),
+    connections: limitFlows(graph, limits, handles, nodeOf, reach).map(({ onCut, ...c }) => ({
+      ...c,
+      bottleneck: reachesModules && onCut,
+    })),
   };
 }
 
@@ -355,8 +356,7 @@ function modulePower(station: Station, module: PlacedModule, sunlit: boolean, pl
     production: solarOf(station, module, sunlit),
     demand: demandUpTo(loads, LOWEST_PRIORITY),
     draw: demandUpTo(loads, runningUpTo),
-    stored: packs.reduce((sum, p) => sum + p.charge, 0),
-    capacity: packs.reduce((sum, p) => sum + p.capacity, 0),
+    ...packTotals(packs),
     powered: !offline && runningUpTo >= MODULE_SYSTEMS_PRIORITY,
     offline,
     running: { slots: module.slots.map(runs), hardpoints: module.hardpoints.map(runs) },

@@ -47,11 +47,13 @@ export interface FailureReport {
 
 const RANK: Record<Level, number> = { ok: 0, yellow: 1, red: 2 };
 
-function levelAbove(value: number, limits: { yellow: number; red: number }): Level {
+/** The warning level of a reading where going above the limits is the danger. */
+export function levelAbove(value: number, limits: { yellow: number; red: number }): Level {
   return value >= limits.red ? "red" : value >= limits.yellow ? "yellow" : "ok";
 }
 
-function levelBelow(value: number, limits: { yellow: number; red: number }): Level {
+/** The warning level of a reading where falling below the limits is the danger. */
+export function levelBelow(value: number, limits: { yellow: number; red: number }): Level {
   return value < limits.red ? "red" : value < limits.yellow ? "yellow" : "ok";
 }
 
@@ -99,6 +101,9 @@ function counts(warning: Warning, crewed: boolean): boolean {
   if (warning.condition === "temperature") return true;
   return crewed;
 }
+
+/** The more serious of two levels. */
+export const worseLevel = (a: Level, b: Level): Level => (RANK[b] > RANK[a] ? b : a);
 
 const worst = (warnings: Warning[]): Level =>
   warnings.reduce<Level>((level, w) => (RANK[w.level] > RANK[level] ? w.level : level), "ok");

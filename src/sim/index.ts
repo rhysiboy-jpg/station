@@ -11,7 +11,7 @@ export { saveStation, loadStation, SAVE_VERSION } from "./save";
 export type { LoadResult } from "./save";
 export { challengeOf, challengeById } from "./challenge";
 export type { ChallengeProgress, HoldProgress, GoalProgress } from "./challenge";
-export { failureOf } from "./failure";
+export { failureOf, levelAbove, levelBelow, worseLevel } from "./failure";
 export type { FailureReport, ModuleStatus, Warning, Condition, Level } from "./failure";
 export { heatOf } from "./heat";
 export type { HeatReport, ModuleHeat, HeatNetwork } from "./heat";
@@ -38,6 +38,7 @@ export { MODULE_TYPES, EQUIPMENT_TYPES, LOWEST_PRIORITY, MODULE_SYSTEMS_PRIORITY
   RACKS_PER_CREW,
   CHALLENGES,
   CHALLENGE_LAPSE_TICKS,
+  WATER_LOW_FRACTION,
   DIFFICULTIES,
 } from "./content";
 export type {

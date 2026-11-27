@@ -5,7 +5,7 @@
 import { EQUIPMENT_TYPES, RACKS_PER_CREW, type EquipmentType } from "./content";
 import { networksOf } from "./networks";
 import { powerOf, type PowerReport } from "./power";
-import type { ModuleId, PlacedModule, Station } from "./station";
+import { moduleById, type ModuleId, type PlacedModule, type Station } from "./station";
 import { SECONDS_PER_TICK } from "./time";
 
 const HOURS_PER_TICK = SECONDS_PER_TICK / 3600;
@@ -97,7 +97,7 @@ export function dataFlows(station: Station, power: PowerReport): DataReport {
   const networks = networksOf(station, "data").map((network): DataNetwork => {
     const totals = { produced: 0, downlink: 0, stored: 0, capacity: 0 };
     for (const id of network.moduleIds) {
-      const module = station.modules.find((m) => m.id === id) as PlacedModule;
+      const module = moduleById(station, id);
       const f = moduleFigures(station, module, power);
       const stored = f.stores.reduce((sum, s) => sum + s.held, 0);
       const capacity = f.stores.reduce((sum, s) => sum + s.capacity, 0);
@@ -139,7 +139,7 @@ export function stepData(station: Station, power: PowerReport): Pick<Station, "d
     let made = 0;
     let send = 0;
     for (const id of network.moduleIds) {
-      const f = moduleFigures(station, station.modules.find((m) => m.id === id) as PlacedModule, power);
+      const f = moduleFigures(station, moduleById(station, id), power);
       made += f.produced * HOURS_PER_TICK;
       send += f.downlink * HOURS_PER_TICK;
       stores.push(...f.stores);

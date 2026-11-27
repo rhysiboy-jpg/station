@@ -167,3 +167,33 @@ export interface ArcHandle {
   node: number;
   index: number;
 }
+
+/** Something joining two nodes with a capacity, such as a connection between modules. */
+export interface Limited<Id> {
+  a: Id;
+  b: Id;
+  capacity: number;
+}
+
+/** Adds a two-way pair for each limit, mapping its ends to graph nodes. Returns the handles in order. */
+export function addLimits<Id>(graph: FlowGraph, limits: Limited<Id>[], nodeOf: (id: Id) => number): ArcHandle[] {
+  return limits.map((l) => graph.addTwoWay(nodeOf(l.a), nodeOf(l.b), l.capacity));
+}
+
+/**
+ * Each limit's flow, and whether it lies on the cut between what the source
+ * can still reach and what it can't: the limits holding flow back.
+ */
+export function limitFlows<Id, L extends Limited<Id>>(
+  graph: FlowGraph,
+  limits: L[],
+  handles: ArcHandle[],
+  nodeOf: (id: Id) => number,
+  reach: Set<number> | undefined,
+): (L & { flow: number; onCut: boolean })[] {
+  return limits.map((l, i) => ({
+    ...l,
+    flow: graph.flow(handles[i] as ArcHandle),
+    onCut: reach !== undefined && reach.has(nodeOf(l.a)) !== reach.has(nodeOf(l.b)),
+  }));
+}

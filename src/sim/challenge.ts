@@ -46,34 +46,44 @@ export function challengeById(id: ChallengeId): Challenge {
   return CHALLENGES.find((c) => c.id === id) as Challenge;
 }
 
-function holdLabel(hold: Hold): string {
-  switch (hold.kind) {
-    case "crew":
-      return `${hold.atLeast} crew aboard`;
-    case "racks":
-      return `${hold.atLeast} lab racks working`;
-    case "coolerThan":
-      return `Every module below ${hold.celsius} °C`;
-  }
-}
-
-function holdReading(station: Station, hold: Hold, power: PowerReport): { value: number; met: boolean } {
-  switch (hold.kind) {
-    case "crew": {
+/** What each kind of hold says and measures, in one place. */
+type HoldOf<K extends Hold["kind"]> = Extract<Hold, { kind: K }>;
+const HOLD_KINDS: {
+  [K in Hold["kind"]]: {
+    label(hold: HoldOf<K>): string;
+    reading(station: Station, hold: HoldOf<K>, power: PowerReport): { value: number; met: boolean };
+  };
+} = {
+  crew: {
+    label: (hold) => `${hold.atLeast} crew aboard`,
+    reading: (station, hold) => {
       const value = crewOf(station.modules);
       return { value, met: value >= hold.atLeast };
-    }
-    case "racks": {
-      const data = dataFlows(station, power);
-      const value = Object.values(data.modules).reduce((sum, m) => sum + m.racksWorking, 0);
+    },
+  },
+  racks: {
+    label: (hold) => `${hold.atLeast} lab racks working`,
+    reading: (station, hold, power) => {
+      const value = Object.values(dataFlows(station, power).modules).reduce((sum, m) => sum + m.racksWorking, 0);
       return { value, met: value >= hold.atLeast };
-    }
-    case "coolerThan": {
+    },
+  },
+  coolerThan: {
+    label: (hold) => `Every module below ${hold.celsius} °C`,
+    reading: (station, hold) => {
       const value = Math.max(...station.modules.map((m) => station.temperature[m.id] ?? NOMINAL_TEMPERATURE));
       return { value, met: value < hold.celsius };
-    }
-  }
-}
+    },
+  },
+};
+
+const holdLabel = (hold: Hold): string => (HOLD_KINDS[hold.kind].label as (h: Hold) => string)(hold);
+const holdReading = (station: Station, hold: Hold, power: PowerReport) =>
+  (HOLD_KINDS[hold.kind].reading as (s: Station, h: Hold, p: PowerReport) => { value: number; met: boolean })(
+    station,
+    hold,
+    power,
+  );
 
 function goalReading(station: Station, run: ChallengeRun, goal: Goal): GoalProgress {
   const value = station.downlinked - run.downlinkedAtStart;

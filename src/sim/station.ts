@@ -102,6 +102,13 @@ export function createStation(): Station {
   };
 }
 
+/** The module with this id. Ids come from the station itself, so a miss is a bug. */
+export function moduleById(station: Station, id: ModuleId): PlacedModule {
+  const module = station.modules.find((m) => m.id === id);
+  if (!module) throw new Error(`no module ${id}`);
+  return module;
+}
+
 export const isOffline = (station: Station, id: ModuleId) => station.offline.includes(id);
 
 /** Whether an offline module still carries resources through, by the station's difficulty. */

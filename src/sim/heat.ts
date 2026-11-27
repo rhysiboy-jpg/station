@@ -9,7 +9,7 @@ import {
   MODULE_TYPES,
   NOMINAL_TEMPERATURE,
 } from "./content";
-import { FlowGraph, type ArcHandle } from "./flow";
+import { addLimits, FlowGraph, limitFlows } from "./flow";
 import { connectionLimitsOf, networksOf } from "./networks";
 import { connectionsOf } from "./placement";
 import { powerOf, type ConnectionFlow, type PowerReport } from "./power";
@@ -89,14 +89,13 @@ export function heatFlows(station: Station, power: PowerReport): HeatReport {
       return heat.made + excess / HEAT_RECOVERY_SECONDS;
     });
     const connections = connectionLimitsOf(station, network, "heat");
-    const index = new Map(members.map((m, i) => [m.id, i]));
+    const index = new Map(members.map((m, i) => [m.id, i + 2]));
+    const nodeOf = (id: ModuleId) => index.get(id) as number;
 
     /** A loop graph taking `amounts[i]` from each module, with twoWays and radiators. */
     const build = (amounts: number[]) => {
       const graph = new FlowGraph(members.length + 2);
-      const twoWays = connections.map((j) =>
-        graph.addTwoWay((index.get(j.a) as number) + 2, (index.get(j.b) as number) + 2, j.capacity),
-      );
+      const twoWays = addLimits(graph, connections, nodeOf);
       const takes = amounts.map((amount, i) => graph.addArc(SOURCE, i + 2, amount));
       rejects.forEach((r, i) => graph.addArc(i + 2, SINK, r));
       graph.augment(SOURCE, SINK);
@@ -160,12 +159,9 @@ export function heatFlows(station: Station, power: PowerReport): HeatReport {
     trial.augment(SOURCE, SINK);
     // Heat that still can't reach a radiator stops at a cut; connections on the cut are the limit.
     const reach = trial.reachable(SOURCE);
-    connections.forEach((j, k) => {
-      const a = (index.get(j.a) as number) + 2;
-      const b = (index.get(j.b) as number) + 2;
-      const twoWay = twoWays[k] as ArcHandle;
-      allConnections.push({ ...j, flow: graph.flow(twoWay), bottleneck: unmet && reach.has(a) !== reach.has(b) });
-    });
+    for (const { onCut, ...c } of limitFlows(graph, connections, twoWays, nodeOf, reach)) {
+      allConnections.push({ ...c, bottleneck: unmet && onCut });
+    }
 
     return {
       moduleIds: network.moduleIds,

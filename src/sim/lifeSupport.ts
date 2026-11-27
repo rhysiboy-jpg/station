@@ -12,7 +12,17 @@ import {
 import { networksOf } from "./networks";
 import { connectionsOf } from "./placement";
 import type { PowerReport } from "./power";
-import { bedsOf, crewOf, isOffline, offlineCutsNetworks, type Air, type ModuleId, type PlacedModule, type Station } from "./station";
+import {
+  bedsOf,
+  crewOf,
+  isOffline,
+  moduleById,
+  offlineCutsNetworks,
+  type Air,
+  type ModuleId,
+  type PlacedModule,
+  type Station,
+} from "./station";
 import { SECONDS_PER_TICK } from "./time";
 
 const DAYS_PER_TICK = SECONDS_PER_TICK / 86_400;
@@ -82,7 +92,7 @@ export function lifeSupportOf(station: Station): LifeSupportReport {
     };
   }
   const networks = networksOf(station, "water").map((network): WaterNetwork => {
-    const members = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
+    const members = network.moduleIds.map((id) => moduleById(station, id));
     return {
       moduleIds: network.moduleIds,
       stored: members.reduce((sum, m) => sum + tankOf(station, m), 0),
@@ -123,7 +133,7 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
     if (isOffline(station, m.id) && held !== undefined) water[m.id] = held;
   }
   for (const network of networksOf(station, "water")) {
-    const members = network.moduleIds.map((id) => station.modules.find((m) => m.id === id) as PlacedModule);
+    const members = network.moduleIds.map((id) => moduleById(station, id));
     const capacity = members.reduce((sum, m) => sum + MODULE_TYPES[m.type].waterTank, 0);
     let stored = members.reduce((sum, m) => sum + tankOf(station, m), 0);
     let treatable = 0;
@@ -169,8 +179,8 @@ export function stepLifeSupport(station: Station, power: PowerReport): Pick<Stat
     if (!airA || !airB) continue;
     if (cut && (isOffline(station, a.moduleId) || isOffline(station, b.moduleId))) continue;
     // Fans move the slower of the two modules' rates (the connection's air capacity).
-    const ma = station.modules.find((m) => m.id === a.moduleId) as PlacedModule;
-    const mb = station.modules.find((m) => m.id === b.moduleId) as PlacedModule;
+    const ma = moduleById(station, a.moduleId);
+    const mb = moduleById(station, b.moduleId);
     const exchanged = Math.min(MODULE_TYPES[ma.type].capacity.air, MODULE_TYPES[mb.type].capacity.air) * SECONDS_PER_TICK;
     const va = volumes.get(a.moduleId) as number;
     const vb = volumes.get(b.moduleId) as number;

@@ -1,7 +1,7 @@
 // Schematic / blueprint colours. One colour per network, used everywhere that
 // network appears; yellow and red are kept for warnings and nothing else.
 // Keep in step with the matching custom properties in style.css.
-import type { EquipmentTypeId } from "../sim";
+import type { EquipmentTypeId, Level } from "../sim";
 
 /** One colour per network (overlays, inspector, totals, equipment swatches). */
 export const network = {
@@ -36,6 +36,11 @@ export const palette = {
   unpowered: 0xff4d5e,
   shedding: 0xffe14d,
 };
+
+/** A warning level's colour; `ok` is whatever the context uses when all is well. */
+export function levelColour(level: Level, ok: number): number {
+  return level === "red" ? palette.danger : level === "yellow" ? palette.warning : ok;
+}
 
 /** Equipment swatches take their network's colour. */
 export const equipmentColour: Record<EquipmentTypeId, number> = {
