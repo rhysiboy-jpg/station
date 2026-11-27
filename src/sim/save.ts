@@ -81,7 +81,8 @@ function readFile(file: unknown): Station {
       s.abandonedBecause === "temperature" ||
       s.abandonedBecause === "o2" ||
       s.abandonedBecause === "co2" ||
-      s.abandonedBecause === "water"
+      s.abandonedBecause === "water" ||
+      s.abandonedBecause === "room"
         ? s.abandonedBecause
         : fail("Part of the save is broken: abandonedBecause isn't valid."),
     difficulty:

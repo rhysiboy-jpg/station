@@ -37,6 +37,8 @@ export interface ModuleType {
   waterTank: number;
   /** Crew it can sleep. Total beds cap the station's headcount. */
   beds: number;
+  /** Crew it has room for at once, working or sheltering. Zero for unpressurised modules. */
+  maxCrew: number;
   /**
    * Heat needed to warm it by 1 °C, in kJ. Bigger is slower to heat up. About
    * 300 kJ/°C per cell: far below a real module's (around 10 MJ/°C), so that
@@ -69,6 +71,7 @@ export const MODULE_TYPES = {
     volume: 20,
     waterTank: 0,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 300,
   },
   corridor: {
@@ -91,6 +94,7 @@ export const MODULE_TYPES = {
     volume: 30,
     waterTank: 0,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 900,
   },
   habitat: {
@@ -113,6 +117,7 @@ export const MODULE_TYPES = {
     volume: 120,
     waterTank: 5,
     beds: 4,
+    maxCrew: 6,
     heatCapacity: 1800,
   },
   "life-support": {
@@ -135,6 +140,7 @@ export const MODULE_TYPES = {
     volume: 40,
     waterTank: 10,
     beds: 0,
+    maxCrew: 2,
     heatCapacity: 600,
   },
   lab: {
@@ -157,6 +163,7 @@ export const MODULE_TYPES = {
     volume: 75,
     waterTank: 0,
     beds: 0,
+    maxCrew: 4,
     heatCapacity: 1200,
   },
   truss: {
@@ -183,6 +190,7 @@ export const MODULE_TYPES = {
     volume: 0,
     waterTank: 0,
     beds: 0,
+    maxCrew: 0,
     heatCapacity: 900,
   },
 } as const satisfies Record<string, ModuleType>;

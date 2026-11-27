@@ -149,6 +149,7 @@ function showAbandoned(): void {
         o2: "the modules they could reach were short of oxygen",
         co2: "the air in the modules they could reach had too much CO₂",
         water: "the water had run out",
+        room: "the modules fit to hold them had no room left",
       };
       const why = station.abandonedBecause ? because[station.abandonedBecause] : "nowhere fit was left";
       text.textContent = `On orbit ${orbitOf(station).orbit} the crew returned to Earth: ${why}. You can keep looking at what went wrong, or start again.`;

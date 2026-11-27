@@ -72,7 +72,7 @@ export interface Station {
   /** Everyone has left. The only game over. */
   abandoned: boolean;
   /** What drove the crew out of the last module they had to leave, once abandoned. */
-  abandonedBecause: "temperature" | "o2" | "co2" | "water" | null;
+  abandonedBecause: "temperature" | "o2" | "co2" | "water" | "room" | null;
   difficulty: Difficulty;
   /** Earlier module layouts, most recent last, for undo. */
   history: PlacedModule[][];

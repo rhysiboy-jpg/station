@@ -37,6 +37,7 @@ export type RejectionReason =
   | "unpressurised"
   | "bad-headcount"
   | "offline"
+  | "no-room"
   | "abandoned"
   | MountRejection;
 
@@ -173,6 +174,10 @@ function assignCrew(station: Station, command: Extract<Command, { type: "crew" }
   }
   if (command.headcount > 0 && !MODULE_TYPES[module.type].pressurised) {
     return { ok: false, reason: "unpressurised", message: "Crew can only work in pressurised modules." };
+  }
+  const room = MODULE_TYPES[module.type].maxCrew;
+  if (command.headcount > room) {
+    return { ok: false, reason: "no-room", message: `A ${MODULE_TYPES[module.type].name.toLowerCase()} has room for ${room} crew.` };
   }
   const modules = station.modules.map((m) => (m.id === module.id ? { ...m, crew: command.headcount } : m));
   if (crewOf(modules) > bedsOf(modules)) {

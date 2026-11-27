@@ -75,12 +75,12 @@ Every place the game departs from the reference figures, and why.
 
 ## Crew
 
-The first version uses an abstract **headcount** per module: modules need N crew and crew need air, water and a habitat. Individual crew who walk around, with needs and repair jobs, come later.
+The first version uses an abstract **headcount** per module: modules need N crew and crew need air, water and a habitat. Total crew is capped by habitat beds, and each module has room for a set number at once (habitat 6, lab 4, core node, corridor and life support module 2 each), which also limits where evacuated crew can go. Individual crew who walk around, with needs and repair jobs, come later.
 
 ## Failure
 
 - Each module has thresholds for temperature, air (O2 and CO2), water and power. Crossing them raises a **yellow** then a **red** warning, and every current warning is listed in the alerts list.
-- A module that stays red for a quarter orbit (about 30 s at 1x) goes **offline**. A countdown shows how long is left, and dropping back below red calls it off. While offline it makes, uses and stores nothing, and its crew move to the nearest reachable module that is online with nothing in red.
+- A module that stays red for a quarter orbit (about 30 s at 1x) goes **offline**. A countdown shows how long is left, and dropping back below red calls it off. While offline it makes, uses and stores nothing, and its crew move to the nearest reachable modules that are online with nothing in red, filling each up to its room. If they don't all fit, the station is abandoned.
 - Some conditions only count with crew aboard. Temperature always counts. Air and water only count when the module has crew, because they only harm people: an empty module with stale air shows a warning but doesn't count down.
 - Power never takes a module offline by itself. A dark module is a red warning, and the harm comes through its effects: scrubbers stop, radiators stop.
 - An offline module recovers automatically once every reading that counts is back below yellow. Repairs needing crew or spare parts come with the full game.

@@ -258,13 +258,15 @@ export function renderInspector(station: Station, module: PlacedModule | undefin
   const life = lifeSupportOf(station);
   const air = life.modules[module.id];
   if (air) {
-    const room = life.beds - life.crew;
+    const bedsFree = life.beds - life.crew;
+    const roomFree = type.maxCrew - module.crew;
+    const blocked = life.beds === 0 ? "Build a habitat first" : bedsFree <= 0 ? "All beds taken" : roomFree <= 0 ? "No room left in this module" : "";
     html.push(`<h3 class="net air">Crew and air</h3><dl class="totals">`);
     html.push(
       `<dt>Crew</dt><dd><span class="crew-control">` +
         `<button type="button" data-crew="-1" ${module.crew === 0 ? "disabled" : ""} aria-label="One fewer crew">−</button>` +
-        `${module.crew}` +
-        `<button type="button" data-crew="1" ${room <= 0 ? "disabled" : ""} aria-label="One more crew" title="${room <= 0 ? (life.beds === 0 ? "Build a habitat first" : "All beds taken") : `${room} bed${room === 1 ? "" : "s"} free`}">+</button>` +
+        `${module.crew} / ${type.maxCrew}` +
+        `<button type="button" data-crew="1" ${blocked ? "disabled" : ""} aria-label="One more crew" title="${blocked || `${bedsFree} bed${bedsFree === 1 ? "" : "s"} free on the station`}">+</button>` +
         `</span></dd>`,
     );
     if (type.beds > 0) html.push(`<dt>Beds</dt><dd>${type.beds}</dd>`);
