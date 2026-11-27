@@ -7,6 +7,7 @@ A browser game about designing a space station, where the layout of connected co
 - [Game design](docs/design.md)
 - [Glossary](GLOSSARY.md)
 - [Prototype spec](docs/specs/prototype-sandbox.md)
+- [Playtest checklist](docs/playtest.md)
 - [Decision records](docs/adr/)
 
 ## Development
